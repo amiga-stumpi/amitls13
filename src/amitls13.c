@@ -129,6 +129,17 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
         BR_TLS_RSA_WITH_AES_128_CBC_SHA
     };
     ULONG seed[12];
+    char host_copy[256];
+    UWORD hi;
+
+    if(!host) return AMITLS13_ERR_URL;
+    hi=0;
+    while(host[hi] && hi<255){
+        host_copy[hi]=host[hi];
+        hi++;
+    }
+    host_copy[hi]=0;
+    if(host[hi]) return AMITLS13_ERR_URL;
 
     dbg("TLS init full\n");
     br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
@@ -150,14 +161,16 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     dbg("TLS set buffer\n");
     br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
 
-    dbg("TLS client reset sni\n");
-    if(!br_ssl_client_reset(&ctx->sc, host, 0)){
+    dbg("TLS client reset sni hostlen="); dbg_num((LONG)hi); dbg("\n");
+    if(!br_ssl_client_reset(&ctx->sc, host_copy, 0)){
         ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
         dbg("TLS client reset failed brerr=");
         dbg_brerr(ctx->last_error);
         dbg("\n");
         return AMITLS13_ERR_TLS_DISABLED;
     }
+    dbg("TLS reset ok set buffer again\n");
+    br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
     dbg("TLS sslio init\n");
     br_sslio_init(&ctx->ioc, &ctx->sc.eng, tls_sock_read, ctx, tls_sock_write, ctx);
     ctx->tls_active=1;

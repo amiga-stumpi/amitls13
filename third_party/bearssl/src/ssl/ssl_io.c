@@ -23,40 +23,6 @@
  */
 
 #include "inner.h"
-#ifdef AMITLS13_DEBUG
-#include <libraries/dos.h>
-#include <proto/dos.h>
-#include <string.h>
-static void sslio_dbg(const char *s)
-{
-	if (s) {
-		Write(Output(), (APTR)s, strlen(s));
-	}
-}
-static void sslio_dbg_num(long n)
-{
-	char b[16];
-	char t[14];
-	int i = 0;
-	int p = 0;
-	if (n < 0) {
-		sslio_dbg("-");
-		n = -n;
-	}
-	do {
-		t[i++] = (char)('0' + (n % 10));
-		n /= 10;
-	} while (n && i < 13);
-	while (i > 0) {
-		b[p++] = t[--i];
-	}
-	b[p] = 0;
-	sslio_dbg(b);
-}
-#else
-#define sslio_dbg(x) ((void)0)
-#define sslio_dbg_num(x) ((void)0)
-#endif
 
 /* see bearssl_ssl.h */
 void
@@ -88,15 +54,8 @@ run_until(br_sslio_context *ctx, unsigned target)
 	for (;;) {
 		unsigned state;
 
-		sslio_dbg("SSLIO before current_state\n");
 		state = br_ssl_engine_current_state(ctx->engine);
-		sslio_dbg("SSLIO state=");
-		sslio_dbg_num((long)state);
-		sslio_dbg(" target=");
-		sslio_dbg_num((long)target);
-		sslio_dbg("\n");
 		if (state & BR_SSL_CLOSED) {
-			sslio_dbg("SSLIO closed\n");
 			return -1;
 		}
 
@@ -110,13 +69,7 @@ run_until(br_sslio_context *ctx, unsigned target)
 			int wlen;
 
 			buf = br_ssl_engine_sendrec_buf(ctx->engine, &len);
-			sslio_dbg("SSLIO sendrec len=");
-			sslio_dbg_num((long)len);
-			sslio_dbg("\n");
 			wlen = ctx->low_write(ctx->write_context, buf, len);
-			sslio_dbg("SSLIO sendrec wlen=");
-			sslio_dbg_num((long)wlen);
-			sslio_dbg("\n");
 			if (wlen < 0) {
 				/*
 				 * If we received a close_notify and we
@@ -132,9 +85,7 @@ run_until(br_sslio_context *ctx, unsigned target)
 				return -1;
 			}
 			if (wlen > 0) {
-				sslio_dbg("SSLIO before sendrec_ack\n");
 				br_ssl_engine_sendrec_ack(ctx->engine, wlen);
-				sslio_dbg("SSLIO after sendrec_ack\n");
 			}
 			continue;
 		}
@@ -143,7 +94,6 @@ run_until(br_sslio_context *ctx, unsigned target)
 		 * If we reached our target, then we are finished.
 		 */
 		if (state & target) {
-			sslio_dbg("SSLIO target reached\n");
 			return 0;
 		}
 
@@ -169,23 +119,14 @@ run_until(br_sslio_context *ctx, unsigned target)
 			size_t len;
 			int rlen;
 
-			sslio_dbg("SSLIO recvrec path\n");
 			buf = br_ssl_engine_recvrec_buf(ctx->engine, &len);
-			sslio_dbg("SSLIO recvrec len=");
-			sslio_dbg_num((long)len);
-			sslio_dbg("\n");
 			rlen = ctx->low_read(ctx->read_context, buf, len);
-			sslio_dbg("SSLIO recvrec rlen=");
-			sslio_dbg_num((long)rlen);
-			sslio_dbg("\n");
 			if (rlen < 0) {
 				br_ssl_engine_fail(ctx->engine, BR_ERR_IO);
 				return -1;
 			}
 			if (rlen > 0) {
-				sslio_dbg("SSLIO before recvrec_ack\n");
 				br_ssl_engine_recvrec_ack(ctx->engine, rlen);
-				sslio_dbg("SSLIO after recvrec_ack\n");
 			}
 			continue;
 		}
@@ -197,9 +138,7 @@ run_until(br_sslio_context *ctx, unsigned target)
 		 * the buffered data to "make room" for a new incoming
 		 * record.
 		 */
-		sslio_dbg("SSLIO before flush\n");
 		br_ssl_engine_flush(ctx->engine, 0);
-		sslio_dbg("SSLIO after flush\n");
 	}
 }
 
