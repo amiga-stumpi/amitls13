@@ -71,6 +71,40 @@ void br_ssl_hs_client_run(void *t0ctx);
 #include <string.h>
 
 #include "inner.h"
+#ifdef AMITLS13_DEBUG
+#include <libraries/dos.h>
+#include <proto/dos.h>
+#include <string.h>
+static void hs_dbg(const char *s)
+{
+	if (s) {
+		Write(Output(), (APTR)s, strlen(s));
+	}
+}
+static void hs_dbg_num(long n)
+{
+	char b[16];
+	char t[14];
+	int i = 0;
+	int p = 0;
+	if (n < 0) {
+		hs_dbg("-");
+		n = -n;
+	}
+	do {
+		t[i++] = (char)('0' + (n % 10));
+		n /= 10;
+	} while (n && i < 13);
+	while (i > 0) {
+		b[p++] = t[--i];
+	}
+	b[p] = 0;
+	hs_dbg(b);
+}
+#else
+#define hs_dbg(x) ((void)0)
+#define hs_dbg_num(x) ((void)0)
+#endif
 
 /*
  * This macro evaluates to a pointer to the current engine context.
@@ -906,6 +940,9 @@ br_ssl_hs_client_run(void *t0ctx)
 {
 	uint32_t *dp, *rp;
 	const unsigned char *ip;
+#ifdef AMITLS13_DEBUG
+	unsigned long dbg_steps = 0;
+#endif
 
 #define T0_LOCAL(x)    (*(rp - 2 - (x)))
 #define T0_POP()       (*-- dp)
@@ -959,6 +996,20 @@ br_ssl_hs_client_run(void *t0ctx)
 
 	t0_next:
 		t0x = T0_NEXT(&ip);
+#ifdef AMITLS13_DEBUG
+		if (dbg_steps < 128) {
+			hs_dbg("HS op step=");
+			hs_dbg_num((long)dbg_steps);
+			hs_dbg(" op=");
+			hs_dbg_num((long)t0x);
+			hs_dbg(" dp=");
+			hs_dbg_num((long)dp);
+			hs_dbg(" rp=");
+			hs_dbg_num((long)rp);
+			hs_dbg("\n");
+		}
+		dbg_steps++;
+#endif
 		if (t0x < T0_INTERPRETED) {
 			switch (t0x) {
 				int32_t t0off;
