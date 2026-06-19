@@ -130,14 +130,6 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
-    static const uint16_t suites[] = {
-        BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        BR_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-        BR_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-        BR_TLS_RSA_WITH_AES_128_GCM_SHA256,
-        BR_TLS_RSA_WITH_AES_128_CBC_SHA256,
-        BR_TLS_RSA_WITH_AES_128_CBC_SHA
-    };
     ULONG seed[12];
     char host_copy[256];
     UWORD hi;
@@ -153,8 +145,7 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 
     dbg("TLS init full\n");
     br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
-    dbg("TLS reduce suites\n");
-    br_ssl_engine_set_suites(&ctx->sc.eng, suites, sizeof(suites)/sizeof(suites[0]));
+    dbg("TLS full suites active\n");
 
     /* Phase 1 validates transport/TLS flow before CA and hostname checks. */
     dbg("TLS x509 insecure init\n");
