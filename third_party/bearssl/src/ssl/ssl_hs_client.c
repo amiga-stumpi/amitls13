@@ -1557,7 +1557,25 @@ br_ssl_hs_client_run(void *t0ctx)
 	for (u = 0; u < sizeof rng; u ++) {
 		dst[u] = src[u];
 	}
-	br_hmac_drbg_generate(&rng, addr, len);
+	{
+		unsigned char rbuf[64];
+		unsigned char *out = addr;
+		size_t rem = len;
+
+		while (rem > 0) {
+			size_t clen = rem;
+
+			if (clen > sizeof rbuf) {
+				clen = sizeof rbuf;
+			}
+			br_hmac_drbg_generate(&rng, rbuf, clen);
+			for (u = 0; u < clen; u ++) {
+				out[u] = rbuf[u];
+			}
+			out += clen;
+			rem -= clen;
+		}
+	}
 	src = (unsigned char *)&rng;
 	dst = (unsigned char *)&ENG->rng;
 	for (u = 0; u < sizeof rng; u ++) {
