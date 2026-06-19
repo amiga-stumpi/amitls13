@@ -23,6 +23,40 @@
  */
 
 #include "inner.h"
+#ifdef AMITLS13_DEBUG
+#include <libraries/dos.h>
+#include <proto/dos.h>
+#include <string.h>
+static void engine_dbg(const char *s)
+{
+	if (s) {
+		Write(Output(), (APTR)s, strlen(s));
+	}
+}
+static void engine_dbg_num(long n)
+{
+	char b[16];
+	char t[14];
+	int i = 0;
+	int p = 0;
+	if (n < 0) {
+		engine_dbg("-");
+		n = -n;
+	}
+	do {
+		t[i++] = (char)('0' + (n % 10));
+		n /= 10;
+	} while (n && i < 13);
+	while (i > 0) {
+		b[p++] = t[--i];
+	}
+	b[p] = 0;
+	engine_dbg(b);
+}
+#else
+#define engine_dbg(x) ((void)0)
+#define engine_dbg_num(x) ((void)0)
+#endif
 
 #if 0
 /* obsolete */
@@ -1077,7 +1111,17 @@ jump_handshake(br_ssl_engine_context *cc, int action)
 		cc->hlen_in = hlen_in;
 		cc->hlen_out = hlen_out;
 		cc->action = action;
+		engine_dbg("ENG before hsrun action=");
+		engine_dbg_num((long)action);
+		engine_dbg(" hin=");
+		engine_dbg_num((long)hlen_in);
+		engine_dbg(" hout=");
+		engine_dbg_num((long)hlen_out);
+		engine_dbg("\n");
 		cc->hsrun(&cc->cpu);
+		engine_dbg("ENG after hsrun err=");
+		engine_dbg_num((long)br_ssl_engine_last_error(cc));
+		engine_dbg("\n");
 		if (br_ssl_engine_closed(cc)) {
 			return;
 		}
@@ -1308,15 +1352,24 @@ void
 br_ssl_engine_hs_reset(br_ssl_engine_context *cc,
 	void (*hsinit)(void *), void (*hsrun)(void *))
 {
+	engine_dbg("ENG hs_reset enter\n");
+	engine_dbg("ENG before clearbuf\n");
 	engine_clearbuf(cc);
+	engine_dbg("ENG after clearbuf\n");
 	cc->cpu.dp = cc->dp_stack;
 	cc->cpu.rp = cc->rp_stack;
+	engine_dbg("ENG before hsinit\n");
 	hsinit(&cc->cpu);
+	engine_dbg("ENG after hsinit\n");
 	cc->hsrun = hsrun;
 	cc->shutdown_recv = 0;
 	cc->application_data = 0;
 	cc->alert = 0;
+	engine_dbg("ENG before jump_handshake\n");
 	jump_handshake(cc, 0);
+	engine_dbg("ENG after jump_handshake err=");
+	engine_dbg_num((long)br_ssl_engine_last_error(cc));
+	engine_dbg("\n");
 }
 
 /* see inner.h */
