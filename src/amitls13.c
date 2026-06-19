@@ -76,7 +76,9 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
     struct AmiTLS13Context *ctx;
     LONG r;
     ctx=(struct AmiTLS13Context *)opaque;
+    dbg("TLS cb read len="); dbg_num((LONG)len); dbg("\n");
     r=amitls13_tcp_recv(ctx->fd, buf, (ULONG)len);
+    dbg("TLS cb read ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
     if(r<=0) return -1;
     return (int)r;
 }
@@ -86,7 +88,9 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
     struct AmiTLS13Context *ctx;
     LONG r;
     ctx=(struct AmiTLS13Context *)opaque;
+    dbg("TLS cb write len="); dbg_num((LONG)len); dbg("\n");
     r=amitls13_tcp_send(ctx->fd, buf, (ULONG)len);
+    dbg("TLS cb write ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
     if(r<=0) return -1;
     return (int)r;
 }
@@ -165,9 +169,13 @@ LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len)
     int r;
     if(!ctx || ctx->fd<0) return AMITLS13_ERR_IO;
     if(ctx->tls_active){
+        dbg("TLS write_all begin len="); dbg_num((LONG)len); dbg("\n");
         r=br_sslio_write_all(&ctx->ioc, buf, (size_t)len);
+        dbg("TLS write_all ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_num(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
         if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); return AMITLS13_ERR_IO; }
+        dbg("TLS flush begin\n");
         r=br_sslio_flush(&ctx->ioc);
+        dbg("TLS flush ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_num(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
         if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); return AMITLS13_ERR_IO; }
         return (LONG)len;
     }
