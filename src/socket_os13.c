@@ -24,7 +24,6 @@ struct sockaddr_in { UBYTE sin_len; UBYTE sin_family; UWORD sin_port; struct in_
 #define SOCK_STREAM 1
 #define IPPROTO_TCP 6
 
-static UWORD swap16(UWORD v){ return (UWORD)((v << 8) | (v >> 8)); }
 
 static LONG call_socket(LONG domain, LONG type, LONG protocol)
 {
@@ -127,7 +126,7 @@ LONG amitls13_tcp_connect(const char *host, UWORD port, LONG *out_fd)
     memset(&sa, 0, sizeof(sa));
     sa.sin_len = sizeof(sa);
     sa.sin_family = AF_INET;
-    sa.sin_port = swap16(port);
+    sa.sin_port = port;
     memcpy(&sa.sin_addr.s_addr, he->h_addr_list[0], 4);
 
     if(call_connect(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0){

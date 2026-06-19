@@ -46,7 +46,9 @@ LONG amitls13_parse_url(const char *url, AmiTLS13Url *out)
         out->port = 80;
         p = url + 7;
     } else {
-        return AMITLS13_ERR_URL;
+        out->https = 0;
+        out->port = 80;
+        p = url;
     }
 
     h = p;
