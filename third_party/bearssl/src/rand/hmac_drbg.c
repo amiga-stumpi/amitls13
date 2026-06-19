@@ -112,6 +112,7 @@ br_hmac_drbg_generate(br_hmac_drbg_context *ctx, void *out, size_t len)
 #endif
 	br_hmac_key_init(kc, dig, ctx->K, hlen);
 #ifdef AMITLS13_DEBUG
+	drbg_dbg("DRBG returned keyinit\n");
 	drbg_dbg("DRBG after keyinit\n");
 #endif
 	buf = out;

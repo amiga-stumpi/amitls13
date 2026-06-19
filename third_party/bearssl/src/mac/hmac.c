@@ -95,7 +95,12 @@ process_key(const br_hash_class **hc, void *ks,
 		uint32_t align;
 		unsigned char b[256];
 	} tmp_u;
+	union {
+		uint32_t align;
+		unsigned char b[64];
+	} state_u;
 	unsigned char *tmp = tmp_u.b;
+	unsigned char *state = state_u.b;
 	size_t blen, u;
 
 	blen = block_size(*hc);
@@ -104,9 +109,22 @@ process_key(const br_hash_class **hc, void *ks,
 		tmp[u] ^= (unsigned char)bb;
 	}
 	hmac_fill(tmp + key_len, (unsigned char)bb, blen - key_len);
+#ifdef AMITLS13_DEBUG
+	hmac_dbg("HMAC process init\n");
+#endif
 	(*hc)->init(hc);
+#ifdef AMITLS13_DEBUG
+	hmac_dbg("HMAC process update\n");
+#endif
 	(*hc)->update(hc, tmp, blen);
-	(*hc)->state(hc, ks);
+#ifdef AMITLS13_DEBUG
+	hmac_dbg("HMAC process state\n");
+#endif
+	(*hc)->state(hc, state);
+	hmac_copy(ks, state, 64);
+#ifdef AMITLS13_DEBUG
+	hmac_dbg("HMAC process done\n");
+#endif
 }
 
 /* see bearssl.h */
