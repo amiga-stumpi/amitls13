@@ -92,12 +92,19 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
     struct AmiTLS13Context *ctx;
     LONG r;
     ctx=(struct AmiTLS13Context *)opaque;
-    r=amitls13_tcp_recv(ctx->fd, buf, (ULONG)len);
-    if(r<=0){
-        dbg("TLS cb read failed ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
-        return -1;
+    {
+        UWORD tries;
+        for(tries=0; tries<80; tries++){
+            r=amitls13_tcp_recv(ctx->fd, buf, (ULONG)len);
+            if(r>0) return (int)r;
+            if(r<0) break;
+            if(amitls13_socket_errno()!=0) break;
+            dbg("TLS cb read empty wait\n");
+            if(amitls13_tcp_wait_read(ctx->fd, 250000UL) < 0) break;
+        }
     }
-    return (int)r;
+    dbg("TLS cb read failed ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
+    return -1;
 }
 
 static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)

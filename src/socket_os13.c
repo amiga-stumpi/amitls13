@@ -25,6 +25,18 @@ struct sockaddr_in { UBYTE sin_len; UBYTE sin_family; UWORD sin_port; struct in_
 #define IPPROTO_TCP 6
 
 
+static void fd_zero(ULONG *fds)
+{
+    UWORD i;
+    for(i=0;i<8;i++) fds[i]=0;
+}
+
+static void fd_set_one(ULONG *fds, LONG fd)
+{
+    if(fd >= 0 && fd < 256) fds[(UWORD)fd >> 5] |= (1UL << ((UWORD)fd & 31));
+}
+
+
 static LONG call_socket(LONG domain, LONG type, LONG protocol)
 {
     register LONG d0 __asm("d0") = domain;
@@ -72,6 +84,20 @@ static LONG call_close(LONG fd)
     register LONG d0 __asm("d0") = fd;
     register struct Library *a6 __asm("a6") = SocketBase;
     __asm volatile("jsr a6@(-120:W)" : "+r"(d0) : "r"(a6) : "d1", "a0", "a1", "cc", "memory");
+    return d0;
+}
+
+
+static LONG call_waitselect(LONG nfds, ULONG *readfds, ULONG *writefds, ULONG *exceptfds, struct timeval *tv, ULONG *signals)
+{
+    register LONG d0 __asm("d0") = nfds;
+    register ULONG *a0 __asm("a0") = readfds;
+    register ULONG *a1 __asm("a1") = writefds;
+    register ULONG *a2 __asm("a2") = exceptfds;
+    register struct timeval *a3 __asm("a3") = tv;
+    register ULONG *d1 __asm("d1") = signals;
+    register struct Library *a6 __asm("a6") = SocketBase;
+    __asm volatile("jsr a6@(-126:W)" : "+r"(d0) : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(d1), "r"(a6) : "cc", "memory");
     return d0;
 }
 
@@ -151,6 +177,22 @@ LONG amitls13_tcp_recv(LONG fd, UBYTE *buf, ULONG maxlen)
 {
     LONG r=call_recv(fd, buf, maxlen);
     if(r<0) g_last_errno=call_errno();
+    return r;
+}
+
+LONG amitls13_tcp_wait_read(LONG fd, ULONG micros)
+{
+    ULONG rfds[8];
+    struct timeval tv;
+    LONG r;
+
+    if(!SocketBase || fd < 0) return AMITLS13_ERR_SOCKET;
+    fd_zero(rfds);
+    fd_set_one(rfds, fd);
+    tv.tv_sec = (LONG)(micros / 1000000UL);
+    tv.tv_usec = (LONG)(micros % 1000000UL);
+    r = call_waitselect(fd + 1, rfds, 0, 0, &tv, 0);
+    if(r < 0) g_last_errno = call_errno();
     return r;
 }
 
