@@ -1247,7 +1247,13 @@ br_ssl_hs_client_run(void *t0ctx)
 	hs_dbg_num((long)ENG);
 	hs_dbg("\n");
 #endif
-	memset(addr, 0, len);
+	{
+		unsigned char *zp = addr;
+		while (len > 0) {
+			*zp++ = 0;
+			len--;
+		}
+	}
 #ifdef AMITLS13_DEBUG
 	hs_dbg("HS bzero done\n");
 #endif
