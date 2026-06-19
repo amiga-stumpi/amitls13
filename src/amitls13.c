@@ -94,7 +94,7 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
     ctx=(struct AmiTLS13Context *)opaque;
     r=amitls13_tcp_recv(ctx->fd, buf, (ULONG)len);
     if(r<=0){
-        dbg("TLS cb read failed err="); dbg_num(amitls13_socket_errno()); dbg("\n");
+        dbg("TLS cb read failed ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
         return -1;
     }
     return (int)r;
@@ -124,6 +124,10 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
     static const uint16_t suites[] = {
+        BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+        BR_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
+        BR_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+        BR_TLS_RSA_WITH_AES_128_GCM_SHA256,
         BR_TLS_RSA_WITH_AES_128_CBC_SHA256,
         BR_TLS_RSA_WITH_AES_128_CBC_SHA
     };
