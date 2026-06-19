@@ -24,9 +24,67 @@
 
 #include "inner.h"
 
+#ifdef AMITLS13_DEBUG
+#include <libraries/dos.h>
+#include <proto/dos.h>
+#include <string.h>
+
+static void
+rsadbg(const char *s)
+{
+	if (s) {
+		Write(Output(), (APTR)s, strlen(s));
+	}
+}
+
+static void
+rsadbg_num(unsigned long n)
+{
+	char b[16];
+	char t[14];
+	int i = 0;
+	int p = 0;
+	do {
+		t[i ++] = (char)('0' + (n % 10));
+		n /= 10;
+	} while (n && i < 13);
+	while (i > 0) {
+		b[p ++] = t[-- i];
+	}
+	b[p] = 0;
+	rsadbg(b);
+}
+
+static uint32_t
+amitls13_debug_rsa_vrfy(const unsigned char *x, size_t xlen,
+	const unsigned char *hash_oid, size_t hash_len,
+	const br_rsa_public_key *pk, unsigned char *hash_out)
+{
+	uint32_t r;
+	rsadbg("RSA vrfy begin xlen=");
+	rsadbg_num((unsigned long)xlen);
+	rsadbg(" hlen=");
+	rsadbg_num((unsigned long)hash_len);
+	rsadbg(" nlen=");
+	rsadbg_num(pk ? (unsigned long)pk->nlen : 0);
+	rsadbg(" elen=");
+	rsadbg_num(pk ? (unsigned long)pk->elen : 0);
+	rsadbg("\n");
+	r = br_rsa_i15_pkcs1_vrfy(x, xlen, hash_oid, hash_len, pk, hash_out);
+	rsadbg("RSA vrfy end ret=");
+	rsadbg_num((unsigned long)r);
+	rsadbg("\n");
+	return r;
+}
+#endif
+
 /* see bearssl_ssl.h */
 void
 br_ssl_engine_set_default_rsavrfy(br_ssl_engine_context *cc)
 {
+#ifdef AMITLS13_DEBUG
+	br_ssl_engine_set_rsavrfy(cc, amitls13_debug_rsa_vrfy);
+#else
 	br_ssl_engine_set_rsavrfy(cc, br_rsa_pkcs1_vrfy_get_default());
+#endif
 }
