@@ -17,8 +17,8 @@ struct hostent {
 };
 
 struct in_addr { ULONG s_addr; };
-struct sockaddr { UWORD sa_family; char sa_data[14]; };
-struct sockaddr_in { UWORD sin_family; UWORD sin_port; struct in_addr sin_addr; char sin_zero[8]; };
+struct sockaddr { UBYTE sa_len; UBYTE sa_family; char sa_data[14]; };
+struct sockaddr_in { UBYTE sin_len; UBYTE sin_family; UWORD sin_port; struct in_addr sin_addr; char sin_zero[8]; };
 
 #define AF_INET 2
 #define SOCK_STREAM 1
@@ -125,6 +125,7 @@ LONG amitls13_tcp_connect(const char *host, UWORD port, LONG *out_fd)
     if(fd < 0){ g_last_errno=call_errno(); return AMITLS13_ERR_SOCKET; }
 
     memset(&sa, 0, sizeof(sa));
+    sa.sin_len = sizeof(sa);
     sa.sin_family = AF_INET;
     sa.sin_port = swap16(port);
     memcpy(&sa.sin_addr.s_addr, he->h_addr_list[0], 4);
