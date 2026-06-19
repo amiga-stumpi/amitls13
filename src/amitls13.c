@@ -1,5 +1,7 @@
 #include <exec/types.h>
 #include <exec/memory.h>
+#include <exec/execbase.h>
+#include <exec/tasks.h>
 #include <proto/exec.h>
 #include <libraries/dos.h>
 #include <proto/dos.h>
@@ -17,6 +19,27 @@ static void dbg(const char *s)
 #else
     (void)s;
 #endif
+}
+
+static void fill_entropy(ULONG *seed)
+{
+    struct DateStamp ds;
+    ULONG i;
+
+    DateStamp(&ds);
+    seed[0]=(ULONG)ds.ds_Days;
+    seed[1]=(ULONG)ds.ds_Minute;
+    seed[2]=(ULONG)ds.ds_Tick;
+    seed[3]=(ULONG)FindTask(0);
+    seed[4]=(ULONG)SysBase;
+    seed[5]=(ULONG)((struct ExecBase *)SysBase)->VBlankFrequency;
+    seed[6]=(ULONG)((struct ExecBase *)SysBase)->ex_EClockFrequency;
+    seed[7]=(ULONG)((struct ExecBase *)SysBase)->DispCount;
+    seed[8]=(ULONG)AvailMem(MEMF_ANY);
+    seed[9]=(ULONG)AvailMem(MEMF_CHIP);
+    seed[10]=(ULONG)&seed;
+    seed[11]=(ULONG)&ds;
+    for(i=0;i<12;i++) seed[i]^=(seed[(i+5)%12]<<5)^(seed[(i+7)%12]>>3)^(0x9e3779b9UL+i);
 }
 
 struct AmiTLS13Context {
@@ -53,6 +76,8 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
+    ULONG seed[12];
+
     dbg("TLS init full\n");
     br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
 
@@ -61,13 +86,18 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     amitls13_x509_insecure_init(&ctx->ix);
     br_ssl_engine_set_x509(&ctx->sc.eng, &ctx->ix.vtable);
 
-    dbg("TLS set buffer\n");
-    br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
+    dbg("TLS inject entropy\n");
+    fill_entropy(seed);
+    br_ssl_engine_inject_entropy(&ctx->sc.eng, seed, sizeof(seed));
+    memset(seed, 0, sizeof(seed));
+
     dbg("TLS client reset\n");
     if(!br_ssl_client_reset(&ctx->sc, host, 0)){
         ctx->last_error=AMITLS13_ERR_TLS_DISABLED;
         return AMITLS13_ERR_TLS_DISABLED;
     }
+    dbg("TLS set buffer\n");
+    br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
     dbg("TLS sslio init\n");
     br_sslio_init(&ctx->ioc, &ctx->sc.eng, tls_sock_read, ctx, tls_sock_write, ctx);
     ctx->tls_active=1;
