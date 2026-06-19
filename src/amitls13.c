@@ -108,6 +108,11 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     br_ssl_engine_inject_entropy(&ctx->sc.eng, seed, sizeof(seed));
     memset(seed, 0, sizeof(seed));
 
+    /* BearSSL reset first clears the existing buffers; it requires that
+       a buffer was installed at least once before the first reset. */
+    dbg("TLS set buffer\n");
+    br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
+
     dbg("TLS client reset\n");
     if(!br_ssl_client_reset(&ctx->sc, host, 0)){
         ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
@@ -116,8 +121,6 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
         dbg("\n");
         return AMITLS13_ERR_TLS_DISABLED;
     }
-    dbg("TLS set buffer\n");
-    br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
     dbg("TLS sslio init\n");
     br_sslio_init(&ctx->ioc, &ctx->sc.eng, tls_sock_read, ctx, tls_sock_write, ctx);
     ctx->tls_active=1;
