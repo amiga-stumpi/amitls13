@@ -9,6 +9,7 @@ LONG amitls13_tcp_connect(const char *host, UWORD port, LONG *out_fd);
 LONG amitls13_tcp_send(LONG fd, const UBYTE *buf, ULONG len);
 LONG amitls13_tcp_recv(LONG fd, UBYTE *buf, ULONG maxlen);
 LONG amitls13_tcp_wait_read(LONG fd, ULONG micros);
+LONG amitls13_tcp_wait_write(LONG fd, ULONG micros);
 void amitls13_tcp_close(LONG fd);
 LONG amitls13_socket_errno(void);
 

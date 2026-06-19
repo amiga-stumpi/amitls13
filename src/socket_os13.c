@@ -196,6 +196,22 @@ LONG amitls13_tcp_wait_read(LONG fd, ULONG micros)
     return r;
 }
 
+LONG amitls13_tcp_wait_write(LONG fd, ULONG micros)
+{
+    ULONG wfds[8];
+    struct timeval tv;
+    LONG r;
+
+    if(!SocketBase || fd < 0) return AMITLS13_ERR_SOCKET;
+    fd_zero(wfds);
+    fd_set_one(wfds, fd);
+    tv.tv_sec = (LONG)(micros / 1000000UL);
+    tv.tv_usec = (LONG)(micros % 1000000UL);
+    r = call_waitselect(fd + 1, 0, wfds, 0, &tv, 0);
+    if(r < 0) g_last_errno = call_errno();
+    return r;
+}
+
 LONG amitls13_socket_errno(void)
 {
     if(SocketBase) g_last_errno=call_errno();
