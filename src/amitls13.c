@@ -38,6 +38,37 @@ static void dbg_num(LONG n)
 #endif
 }
 
+static void dbg_hex_byte(UBYTE v)
+{
+#ifdef AMITLS13_DEBUG
+    static const char hx[] = "0123456789ABCDEF";
+    char b[3];
+    b[0] = hx[(v >> 4) & 15];
+    b[1] = hx[v & 15];
+    b[2] = 0;
+    dbg(b);
+#else
+    (void)v;
+#endif
+}
+
+static void dbg_dump_bytes(const char *prefix, const UBYTE *buf, ULONG len)
+{
+#ifdef AMITLS13_DEBUG
+    ULONG i, n;
+    dbg(prefix);
+    n = len;
+    if(n > 48) n = 48;
+    for(i=0;i<n;i++){
+        if(i) dbg(" ");
+        dbg_hex_byte(buf[i]);
+    }
+    dbg("\n");
+#else
+    (void)prefix; (void)buf; (void)len;
+#endif
+}
+
 static void dbg_brerr(LONG e)
 {
 #ifdef AMITLS13_DEBUG
@@ -99,8 +130,13 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
             if(r>0) return (int)r;
             if(r<0) break;
             if(amitls13_socket_errno()!=0) break;
-            dbg("TLS cb read empty wait\n");
-            if(amitls13_tcp_wait_read(ctx->fd, 250000UL) < 0) break;
+            {
+                LONG wr;
+                dbg("TLS cb read empty wait\n");
+                wr = amitls13_tcp_wait_read(ctx->fd, 250000UL);
+                dbg("TLS cb wait ret="); dbg_num(wr); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
+                if(wr < 0) break;
+            }
         }
     }
     dbg("TLS cb read failed ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
@@ -115,6 +151,7 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 
     ctx=(struct AmiTLS13Context *)opaque;
     dbg("TLS cb write len="); dbg_num((LONG)len); dbg("\n");
+    dbg_dump_bytes("TLS cb write bytes=", buf, (ULONG)len);
     done=0;
     while(done<len){
         r=amitls13_tcp_send(ctx->fd, buf+done, (ULONG)(len-done));
