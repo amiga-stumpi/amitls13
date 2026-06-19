@@ -23,6 +23,40 @@
  */
 
 #include "inner.h"
+#ifdef AMITLS13_DEBUG
+#include <libraries/dos.h>
+#include <proto/dos.h>
+#include <string.h>
+static void sslio_dbg(const char *s)
+{
+	if (s) {
+		Write(Output(), (APTR)s, strlen(s));
+	}
+}
+static void sslio_dbg_num(long n)
+{
+	char b[16];
+	char t[14];
+	int i = 0;
+	int p = 0;
+	if (n < 0) {
+		sslio_dbg("-");
+		n = -n;
+	}
+	do {
+		t[i++] = (char)('0' + (n % 10));
+		n /= 10;
+	} while (n && i < 13);
+	while (i > 0) {
+		b[p++] = t[--i];
+	}
+	b[p] = 0;
+	sslio_dbg(b);
+}
+#else
+#define sslio_dbg(x) ((void)0)
+#define sslio_dbg_num(x) ((void)0)
+#endif
 
 /* see bearssl_ssl.h */
 void
@@ -69,7 +103,13 @@ run_until(br_sslio_context *ctx, unsigned target)
 			int wlen;
 
 			buf = br_ssl_engine_sendrec_buf(ctx->engine, &len);
+			sslio_dbg("SSLIO sendrec len=");
+			sslio_dbg_num((long)len);
+			sslio_dbg("\n");
 			wlen = ctx->low_write(ctx->write_context, buf, len);
+			sslio_dbg("SSLIO sendrec wlen=");
+			sslio_dbg_num((long)wlen);
+			sslio_dbg("\n");
 			if (wlen < 0) {
 				/*
 				 * If we received a close_notify and we
@@ -85,7 +125,9 @@ run_until(br_sslio_context *ctx, unsigned target)
 				return -1;
 			}
 			if (wlen > 0) {
+				sslio_dbg("SSLIO before sendrec_ack\n");
 				br_ssl_engine_sendrec_ack(ctx->engine, wlen);
+				sslio_dbg("SSLIO after sendrec_ack\n");
 			}
 			continue;
 		}
