@@ -1541,7 +1541,31 @@ br_ssl_hs_client_run(void *t0ctx)
 
 	size_t len = (size_t)T0_POP();
 	void *addr = (unsigned char *)ENG + (size_t)T0_POP();
-	br_hmac_drbg_generate(&ENG->rng, addr, len);
+	br_hmac_drbg_context rng;
+	unsigned char *dst = (unsigned char *)&rng;
+	unsigned char *src = (unsigned char *)&ENG->rng;
+	size_t u;
+#ifdef AMITLS13_DEBUG
+	hs_dbg("HS mkrand len=");
+	hs_dbg_num((long)len);
+	hs_dbg(" addr=");
+	hs_dbg_num((long)addr);
+	hs_dbg(" rng=");
+	hs_dbg_num((long)&ENG->rng);
+	hs_dbg("\n");
+#endif
+	for (u = 0; u < sizeof rng; u ++) {
+		dst[u] = src[u];
+	}
+	br_hmac_drbg_generate(&rng, addr, len);
+	src = (unsigned char *)&rng;
+	dst = (unsigned char *)&ENG->rng;
+	for (u = 0; u < sizeof rng; u ++) {
+		dst[u] = src[u];
+	}
+#ifdef AMITLS13_DEBUG
+	hs_dbg("HS mkrand done\n");
+#endif
 
 				}
 				break;
