@@ -207,8 +207,7 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
         dbg("\n");
         return AMITLS13_ERR_TLS_DISABLED;
     }
-    dbg("TLS reset ok set buffer again\n");
-    br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
+    dbg("TLS reset ok\n");
     dbg("TLS sslio init\n");
     br_sslio_init(&ctx->ioc, &ctx->sc.eng, tls_sock_read, ctx, tls_sock_write, ctx);
     ctx->tls_active=1;
