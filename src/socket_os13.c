@@ -11,8 +11,8 @@ static LONG g_last_errno = 0;
 struct hostent {
     char *h_name;
     char **h_aliases;
-    short h_addrtype;
-    short h_length;
+    int h_addrtype;
+    int h_length;
     char **h_addr_list;
 };
 
