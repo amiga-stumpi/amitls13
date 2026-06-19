@@ -38,6 +38,22 @@ static void dbg_num(LONG n)
 #endif
 }
 
+static void dbg_brerr(LONG e)
+{
+#ifdef AMITLS13_DEBUG
+    dbg_num(e);
+    if(e >= BR_ERR_RECV_FATAL_ALERT && e < BR_ERR_SEND_FATAL_ALERT){
+        dbg(" recv_alert=");
+        dbg_num(e - BR_ERR_RECV_FATAL_ALERT);
+    } else if(e >= BR_ERR_SEND_FATAL_ALERT){
+        dbg(" send_alert=");
+        dbg_num(e - BR_ERR_SEND_FATAL_ALERT);
+    }
+#else
+    (void)e;
+#endif
+}
+
 static void fill_entropy(ULONG *seed)
 {
     struct DateStamp ds;
@@ -124,12 +140,11 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     dbg("TLS set buffer\n");
     br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
 
-    dbg("TLS client reset no-sni\n");
-    (void)host;
-    if(!br_ssl_client_reset(&ctx->sc, 0, 0)){
+    dbg("TLS client reset sni\n");
+    if(!br_ssl_client_reset(&ctx->sc, host, 0)){
         ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
         dbg("TLS client reset failed brerr=");
-        dbg_num(ctx->last_error);
+        dbg_brerr(ctx->last_error);
         dbg("\n");
         return AMITLS13_ERR_TLS_DISABLED;
     }
@@ -179,11 +194,11 @@ LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len)
     if(ctx->tls_active){
         dbg("TLS write_all begin len="); dbg_num((LONG)len); dbg("\n");
         r=br_sslio_write_all(&ctx->ioc, buf, (size_t)len);
-        dbg("TLS write_all ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_num(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
+        dbg("TLS write_all ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
         if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); return AMITLS13_ERR_IO; }
         dbg("TLS flush begin\n");
         r=br_sslio_flush(&ctx->ioc);
-        dbg("TLS flush ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_num(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
+        dbg("TLS flush ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
         if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); return AMITLS13_ERR_IO; }
         return (LONG)len;
     }
