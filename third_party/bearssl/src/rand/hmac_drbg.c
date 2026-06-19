@@ -58,6 +58,15 @@ static void drbg_dbg_num(long n)
 #define drbg_dbg_num(x) ((void)0)
 #endif
 
+static union {
+	uint32_t align;
+	br_hmac_key_context ctx;
+} drbg_kc_scratch;
+static union {
+	uint32_t align;
+	br_hmac_context ctx;
+} drbg_hc_scratch;
+
 /* see bearssl.h */
 void
 br_hmac_drbg_init(br_hmac_drbg_context *ctx,
@@ -78,16 +87,8 @@ void
 br_hmac_drbg_generate(br_hmac_drbg_context *ctx, void *out, size_t len)
 {
 	const br_hash_class *dig;
-	union {
-		uint32_t align;
-		br_hmac_key_context ctx;
-	} kc_u;
-	union {
-		uint32_t align;
-		br_hmac_context ctx;
-	} hc_u;
-	br_hmac_key_context *kc = &kc_u.ctx;
-	br_hmac_context *hc = &hc_u.ctx;
+	br_hmac_key_context *kc = &drbg_kc_scratch.ctx;
+	br_hmac_context *hc = &drbg_hc_scratch.ctx;
 	size_t hlen;
 	unsigned char *buf;
 	unsigned char x;

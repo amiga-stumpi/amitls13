@@ -77,6 +77,32 @@ hmac_fill(void *dst, unsigned char c, size_t len)
 	}
 }
 
+
+static union {
+	uint32_t align;
+	unsigned char b[256];
+} hmac_tmp_scratch;
+static union {
+	uint32_t align;
+	unsigned char b[64];
+} hmac_state_scratch;
+static union {
+	uint32_t align;
+	br_hash_compat_context ctx;
+} hmac_hash_scratch;
+static union {
+	uint32_t align;
+	unsigned char b[64];
+} hmac_kbuf_scratch;
+static union {
+	uint32_t align;
+	br_hash_compat_context ctx;
+} hmac_out_hash_scratch;
+static union {
+	uint32_t align;
+	unsigned char b[64];
+} hmac_out_tmp_scratch;
+
 static inline size_t
 block_size(const br_hash_class *dig)
 {
@@ -91,16 +117,8 @@ static void
 process_key(const br_hash_class **hc, void *ks,
 	const void *key, size_t key_len, unsigned bb)
 {
-	union {
-		uint32_t align;
-		unsigned char b[256];
-	} tmp_u;
-	union {
-		uint32_t align;
-		unsigned char b[64];
-	} state_u;
-	unsigned char *tmp = tmp_u.b;
-	unsigned char *state = state_u.b;
+	unsigned char *tmp = hmac_tmp_scratch.b;
+	unsigned char *state = hmac_state_scratch.b;
 	size_t blen, u;
 
 	blen = block_size(*hc);
@@ -132,16 +150,8 @@ void
 br_hmac_key_init(br_hmac_key_context *kc,
 	const br_hash_class *dig, const void *key, size_t key_len)
 {
-	union {
-		uint32_t align;
-		br_hash_compat_context ctx;
-	} hc_u;
-	union {
-		uint32_t align;
-		unsigned char b[64];
-	} kbuf_u;
-	br_hash_compat_context *hc = &hc_u.ctx;
-	unsigned char *kbuf = kbuf_u.b;
+	br_hash_compat_context *hc = &hmac_hash_scratch.ctx;
+	unsigned char *kbuf = hmac_kbuf_scratch.b;
 
 #ifdef AMITLS13_DEBUG
 	hmac_dbg("HMAC keyinit enter kc=");
@@ -208,16 +218,8 @@ size_t
 br_hmac_out(const br_hmac_context *ctx, void *out)
 {
 	const br_hash_class *dig;
-	union {
-		uint32_t align;
-		br_hash_compat_context ctx;
-	} hc_u;
-	union {
-		uint32_t align;
-		unsigned char b[64];
-	} tmp_u;
-	br_hash_compat_context *hc = &hc_u.ctx;
-	unsigned char *tmp = tmp_u.b;
+	br_hash_compat_context *hc = &hmac_out_hash_scratch.ctx;
+	unsigned char *tmp = hmac_out_tmp_scratch.b;
 	size_t blen, hlen;
 
 	dig = ctx->dig.vtable;
