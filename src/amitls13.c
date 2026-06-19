@@ -10,6 +10,15 @@
 #include "socket_os13.h"
 #include "x509_insecure.h"
 
+static void dbg(const char *s)
+{
+#ifdef AMITLS13_DEBUG
+    if(s) Write(Output(), (APTR)s, strlen(s));
+#else
+    (void)s;
+#endif
+}
+
 struct AmiTLS13Context {
     LONG fd;
     LONG last_error;
@@ -44,17 +53,22 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
+    dbg("TLS init full\n");
     br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
 
     /* Phase 1 validates transport/TLS flow before CA and hostname checks. */
+    dbg("TLS x509 insecure init\n");
     amitls13_x509_insecure_init(&ctx->ix);
     br_ssl_engine_set_x509(&ctx->sc.eng, &ctx->ix.vtable);
 
+    dbg("TLS set buffer\n");
     br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
+    dbg("TLS client reset\n");
     if(!br_ssl_client_reset(&ctx->sc, host, 0)){
         ctx->last_error=AMITLS13_ERR_TLS_DISABLED;
         return AMITLS13_ERR_TLS_DISABLED;
     }
+    dbg("TLS sslio init\n");
     br_sslio_init(&ctx->ioc, &ctx->sc.eng, tls_sock_read, ctx, tls_sock_write, ctx);
     ctx->tls_active=1;
     return AMITLS13_OK;
@@ -161,6 +175,7 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
     strcat(req, " HTTP/1.0\r\nHost: ");
     strcat(req, parsed.host);
     strcat(req, "\r\nConnection: close\r\n\r\n");
+    if(parsed.https) dbg("TLS write request\n");
     if(AmiTLS13_Write(ctx, (const UBYTE *)req, strlen(req))<0){
         AmiTLS13_Close(ctx);
         return AMITLS13_ERR_IO;
@@ -169,6 +184,7 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
     fh=0;
     if(outfile && outfile[0]) fh=Open((STRPTR)outfile, MODE_NEWFILE);
     total=0;
+    if(parsed.https) dbg("TLS read response\n");
     while((n=AmiTLS13_Read(ctx, buf, sizeof(buf)))>0){
         total+=n;
         if(fh) Write(fh, buf, n);
