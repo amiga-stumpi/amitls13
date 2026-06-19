@@ -24,6 +24,22 @@
 
 #include "inner.h"
 
+#ifdef AMITLS13_DEBUG
+#include <libraries/dos.h>
+#include <proto/dos.h>
+#include <string.h>
+
+static void
+rpubdbg(const char *s)
+{
+	if (s) {
+		Write(Output(), (APTR)s, strlen(s));
+	}
+}
+#else
+#define rpubdbg(s) ((void)0)
+#endif
+
 /*
  * As a strict minimum, we need four buffers that can hold a
  * modular integer.
@@ -37,12 +53,24 @@ br_rsa_i15_public(unsigned char *x, size_t xlen,
 {
 	const unsigned char *n;
 	size_t nlen;
-	uint16_t tmp[1 + TLEN];
+	#ifdef AMITLS13_DEBUG
+	static uint16_t tmp_storage[2 + TLEN];
+	uint16_t *tmp;
+#else
+	uint16_t tmp_storage[2 + TLEN];
+	uint16_t *tmp;
+#endif
 	uint16_t *m, *a, *t;
 	size_t fwlen;
 	long z;
 	uint16_t m0i;
 	uint32_t r;
+
+	rpubdbg("AMITLS13 RSA public enter\n");
+	tmp = tmp_storage;
+	if (((uintptr_t)tmp & 1) != 0) {
+		tmp = (uint16_t *)((unsigned char *)tmp + 1);
+	}
 
 	/*
 	 * Get the actual length of the modulus, and see if it fits within
@@ -55,6 +83,7 @@ br_rsa_i15_public(unsigned char *x, size_t xlen,
 		nlen --;
 	}
 	if (nlen == 0 || nlen > (BR_MAX_RSA_SIZE >> 3) || xlen != nlen) {
+		rpubdbg("AMITLS13 RSA public bad length\n");
 		return 0;
 	}
 	z = (long)nlen << 3;
@@ -86,6 +115,7 @@ br_rsa_i15_public(unsigned char *x, size_t xlen,
 	/*
 	 * Decode the modulus.
 	 */
+	rpubdbg("AMITLS13 RSA public decode n\n");
 	br_i15_decode(m, n, nlen);
 	m0i = br_i15_ninv15(m[1]);
 
@@ -98,16 +128,21 @@ br_rsa_i15_public(unsigned char *x, size_t xlen,
 	/*
 	 * Decode x[] into a[]; we also check that its value is proper.
 	 */
+	rpubdbg("AMITLS13 RSA public decode sig\n");
 	r &= br_i15_decode_mod(a, x, xlen, m);
 
 	/*
 	 * Compute the modular exponentiation.
 	 */
+	rpubdbg("AMITLS13 RSA public modpow begin\n");
 	br_i15_modpow_opt(a, pk->e, pk->elen, m, m0i, t, TLEN - 2 * fwlen);
+	rpubdbg("AMITLS13 RSA public modpow end\n");
 
 	/*
 	 * Encode the result.
 	 */
+	rpubdbg("AMITLS13 RSA public encode\n");
 	br_i15_encode(x, xlen, a);
+	rpubdbg("AMITLS13 RSA public leave\n");
 	return r;
 }
