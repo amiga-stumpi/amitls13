@@ -92,10 +92,11 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
     struct AmiTLS13Context *ctx;
     LONG r;
     ctx=(struct AmiTLS13Context *)opaque;
-    dbg("TLS cb read len="); dbg_num((LONG)len); dbg("\n");
     r=amitls13_tcp_recv(ctx->fd, buf, (ULONG)len);
-    dbg("TLS cb read ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
-    if(r<=0) return -1;
+    if(r<=0){
+        dbg("TLS cb read failed err="); dbg_num(amitls13_socket_errno()); dbg("\n");
+        return -1;
+    }
     return (int)r;
 }
 

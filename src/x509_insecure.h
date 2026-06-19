@@ -7,8 +7,10 @@
 typedef struct AmiTLS13InsecureX509Context {
     const br_x509_class *vtable;
     br_x509_decoder_context decoder;
-    const br_x509_pkey *pkey;
+    br_x509_pkey pkey;
+    UBYTE key_data[BR_X509_BUFSIZE_KEY];
     UWORD cert_index;
+    UBYTE have_pkey;
     UBYTE failed;
 } AmiTLS13InsecureX509Context;
 

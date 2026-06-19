@@ -29,12 +29,55 @@ static void xdbg_num(LONG n)
 #endif
 }
 
+
+static void ix_clear_pkey(AmiTLS13InsecureX509Context *xc)
+{
+    xc->have_pkey=0;
+    memset(&xc->pkey,0,sizeof(xc->pkey));
+    memset(xc->key_data,0,sizeof(xc->key_data));
+}
+
+static UBYTE ix_copy_pkey(AmiTLS13InsecureX509Context *xc, const br_x509_pkey *pk)
+{
+    size_t nlen;
+    size_t elen;
+    size_t qlen;
+
+    ix_clear_pkey(xc);
+    if(!pk) return 0;
+    xc->pkey.key_type=pk->key_type;
+    if(pk->key_type==BR_KEYTYPE_RSA){
+        nlen=pk->key.rsa.nlen;
+        elen=pk->key.rsa.elen;
+        if(nlen+elen>sizeof(xc->key_data)) return 0;
+        memcpy(xc->key_data, pk->key.rsa.n, nlen);
+        memcpy(xc->key_data+nlen, pk->key.rsa.e, elen);
+        xc->pkey.key.rsa.n=xc->key_data;
+        xc->pkey.key.rsa.nlen=nlen;
+        xc->pkey.key.rsa.e=xc->key_data+nlen;
+        xc->pkey.key.rsa.elen=elen;
+        xc->have_pkey=1;
+        return 1;
+    }
+    if(pk->key_type==BR_KEYTYPE_EC){
+        qlen=pk->key.ec.qlen;
+        if(qlen>sizeof(xc->key_data)) return 0;
+        memcpy(xc->key_data, pk->key.ec.q, qlen);
+        xc->pkey.key.ec.curve=pk->key.ec.curve;
+        xc->pkey.key.ec.q=xc->key_data;
+        xc->pkey.key.ec.qlen=qlen;
+        xc->have_pkey=1;
+        return 1;
+    }
+    return 0;
+}
+
 static void ix_start_chain(const br_x509_class **ctx, const char *server_name)
 {
     AmiTLS13InsecureX509Context *xc;
     xc=(AmiTLS13InsecureX509Context *)(void *)ctx;
-    xdbg("X509 start_chain "); xdbg(server_name ? server_name : "(null)"); xdbg("\n");
-    xc->pkey=0;
+    xdbg("X509 start_chain\n");
+    ix_clear_pkey(xc);
     xc->cert_index=0;
     xc->failed=0;
     (void)server_name;
@@ -56,9 +99,7 @@ static void ix_append(const br_x509_class **ctx, const unsigned char *buf, size_
     AmiTLS13InsecureX509Context *xc;
     xc=(AmiTLS13InsecureX509Context *)(void *)ctx;
     if(xc->cert_index==0){
-        xdbg("X509 append len="); xdbg_num((LONG)len); xdbg("\n");
         br_x509_decoder_push(&xc->decoder, buf, len);
-        xdbg("X509 append done err="); xdbg_num((LONG)br_x509_decoder_last_error(&xc->decoder)); xdbg("\n");
     }
 }
 
@@ -68,10 +109,10 @@ static void ix_end_cert(const br_x509_class **ctx)
     xc=(AmiTLS13InsecureX509Context *)(void *)ctx;
     xdbg("X509 end_cert idx="); xdbg_num(xc->cert_index); xdbg("\n");
     if(xc->cert_index==0){
-        xdbg("X509 get_pkey\n");
-        xc->pkey=br_x509_decoder_get_pkey(&xc->decoder);
-        xdbg("X509 pkey ptr="); xdbg_num((LONG)xc->pkey); xdbg(" err="); xdbg_num((LONG)br_x509_decoder_last_error(&xc->decoder)); xdbg("\n");
-        if(!xc->pkey) xc->failed=1;
+        const br_x509_pkey *pk;
+        pk=br_x509_decoder_get_pkey(&xc->decoder);
+        if(!ix_copy_pkey(xc, pk)) xc->failed=1;
+        xdbg("X509 pkey copied="); xdbg_num((LONG)xc->have_pkey); xdbg(" type="); xdbg_num((LONG)xc->pkey.key_type); xdbg("\n");
     }
     xc->cert_index++;
 }
@@ -80,17 +121,17 @@ static unsigned ix_end_chain(const br_x509_class **ctx)
 {
     AmiTLS13InsecureX509Context *xc;
     xc=(AmiTLS13InsecureX509Context *)(void *)ctx;
-    xdbg("X509 end_chain failed="); xdbg_num(xc->failed); xdbg(" pkey="); xdbg_num((LONG)xc->pkey); xdbg("\n");
-    return (xc->failed || !xc->pkey) ? BR_ERR_X509_BAD_SERVER_NAME : 0;
+    xdbg("X509 end_chain failed="); xdbg_num(xc->failed); xdbg(" have_pkey="); xdbg_num((LONG)xc->have_pkey); xdbg("\n");
+    return (xc->failed || !xc->have_pkey) ? BR_ERR_X509_BAD_SERVER_NAME : 0;
 }
 
 static const br_x509_pkey *ix_get_pkey(const br_x509_class *const *ctx, unsigned *usages)
 {
     const AmiTLS13InsecureX509Context *xc;
     xc=(const AmiTLS13InsecureX509Context *)(const void *)ctx;
-    xdbg("X509 get_pkey cb pkey="); xdbg_num((LONG)xc->pkey); xdbg("\n");
+    xdbg("X509 get_pkey cb have_pkey="); xdbg_num((LONG)xc->have_pkey); xdbg("\n");
     if(usages) *usages=BR_KEYTYPE_KEYX|BR_KEYTYPE_SIGN;
-    return xc->pkey;
+    return xc->have_pkey ? &xc->pkey : 0;
 }
 
 static const br_x509_class ix_vtable = {
