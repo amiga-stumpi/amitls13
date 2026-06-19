@@ -1234,8 +1234,23 @@ br_ssl_hs_client_run(void *t0ctx)
 				/* bzero */
 
 	size_t len = (size_t)T0_POP();
-	void *addr = (unsigned char *)ENG + (size_t)T0_POP();
+	size_t off = (size_t)T0_POP();
+	void *addr = (unsigned char *)ENG + off;
+#ifdef AMITLS13_DEBUG
+	hs_dbg("HS bzero off=");
+	hs_dbg_num((long)off);
+	hs_dbg(" len=");
+	hs_dbg_num((long)len);
+	hs_dbg(" addr=");
+	hs_dbg_num((long)addr);
+	hs_dbg(" eng=");
+	hs_dbg_num((long)ENG);
+	hs_dbg("\n");
+#endif
 	memset(addr, 0, len);
+#ifdef AMITLS13_DEBUG
+	hs_dbg("HS bzero done\n");
+#endif
 
 				}
 				break;
