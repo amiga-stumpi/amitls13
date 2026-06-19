@@ -11,11 +11,11 @@ AmiTLS13 is not intended to be a full AmiSSL replacement. It will expose a small
 ## Phase 1: Static HTTPS Proof of Concept
 
 1. Import BearSSL source into `third_party/bearssl/`.
-2. Build only the needed BearSSL client pieces.
+2. Build only the needed BearSSL client pieces. Current PoC still builds a broad BearSSL subset; object pruning is a follow-up.
 3. Implement a bsdsocket-backed transport adapter.
 4. Implement minimal URL parsing for `https://host[:port]/path`.
 5. Build `tools/amitls13_get` as a static test program.
-6. First test mode may allow insecure TLS to validate handshake and data flow.
+6. First test mode uses an insecure X.509 acceptor to validate handshake and data flow.
 7. Then enable CA/hostname verification.
 
 Expected test:

@@ -16,4 +16,4 @@ The goal is not to port the full AmiSSL/OpenSSL API. Instead, AmiTLS13 provides 
 
 ## Current Status
 
-Phase 1 has started. The repository contains the OS1.3-safe project scaffold, public API draft, URL parser, bsdsocket adapter, and a test client skeleton. BearSSL has been imported into `third_party/bearssl/`. The next Phase 1 step is wiring the BearSSL client engine into `AmiTLS13_Connect()` and enabling an insecure handshake test before certificate validation.
+Phase 1 is now a static BearSSL-backed HTTPS proof of concept. The repository contains the OS1.3-safe project scaffold, public API draft, URL parser, bsdsocket adapter, BearSSL import, insecure X.509 acceptor, AmigaOS 1.3 PRNG seeder, and `tools/amitls13_get`. The current handshake path is intentionally insecure: it accepts the server certificate chain without CA or hostname validation so transport and TLS data flow can be tested first. Certificate and hostname verification are the next milestone.
