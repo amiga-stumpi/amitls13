@@ -16,6 +16,7 @@ struct AmiTLS13Context {
     ULONG flags;
     UBYTE tls_active;
     br_ssl_client_context sc;
+    br_x509_minimal_context xc;
     br_sslio_context ioc;
     AmiTLS13InsecureX509Context ix;
     UBYTE iobuf[BR_SSL_BUFSIZE_BIDI];
@@ -43,21 +44,12 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
-    br_ssl_client_zero(&ctx->sc);
+    br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
+
+    /* Phase 1 validates transport/TLS flow before CA and hostname checks. */
     amitls13_x509_insecure_init(&ctx->ix);
     br_ssl_engine_set_x509(&ctx->sc.eng, &ctx->ix.vtable);
-    br_ssl_client_set_default_rsapub(&ctx->sc);
-    br_ssl_engine_set_versions(&ctx->sc.eng, BR_TLS10, BR_TLS12);
-    br_ssl_engine_set_default_aes_cbc(&ctx->sc.eng);
-    br_ssl_engine_set_default_aes_gcm(&ctx->sc.eng);
-    br_ssl_engine_set_default_des_cbc(&ctx->sc.eng);
-    br_ssl_engine_set_default_chapol(&ctx->sc.eng);
-    br_ssl_engine_set_default_rsavrfy(&ctx->sc.eng);
-    br_ssl_engine_set_default_ecdsa(&ctx->sc.eng);
-    br_ssl_engine_set_default_ec(&ctx->sc.eng);
-    br_ssl_engine_set_prf10(&ctx->sc.eng, &br_tls10_prf);
-    br_ssl_engine_set_prf_sha256(&ctx->sc.eng, &br_tls12_sha256_prf);
-    br_ssl_engine_set_prf_sha384(&ctx->sc.eng, &br_tls12_sha384_prf);
+
     br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
     if(!br_ssl_client_reset(&ctx->sc, host, 0)){
         ctx->last_error=AMITLS13_ERR_TLS_DISABLED;

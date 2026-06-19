@@ -15,7 +15,7 @@ AmiTLS13 is not intended to be a full AmiSSL replacement. It will expose a small
 3. Implement a bsdsocket-backed transport adapter.
 4. Implement minimal URL parsing for `https://host[:port]/path`.
 5. Build `tools/amitls13_get` as a static test program.
-6. First test mode uses an insecure X.509 acceptor to validate handshake and data flow.
+6. First test mode uses BearSSLs full client profile with an insecure X.509 acceptor to validate handshake and data flow.
 7. Then enable CA/hostname verification.
 
 Expected test:
