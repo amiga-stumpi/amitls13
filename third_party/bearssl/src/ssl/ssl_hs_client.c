@@ -1558,7 +1558,10 @@ br_ssl_hs_client_run(void *t0ctx)
 		dst[u] = src[u];
 	}
 	{
-		unsigned char rbuf[64];
+		union {
+			uint32_t align;
+			unsigned char b[64];
+		} rbuf;
 		unsigned char *out = addr;
 		size_t rem = len;
 
@@ -1568,9 +1571,9 @@ br_ssl_hs_client_run(void *t0ctx)
 			if (clen > sizeof rbuf) {
 				clen = sizeof rbuf;
 			}
-			br_hmac_drbg_generate(&rng, rbuf, clen);
+			br_hmac_drbg_generate(&rng, rbuf.b, clen);
 			for (u = 0; u < clen; u ++) {
-				out[u] = rbuf[u];
+				out[u] = rbuf.b[u];
 			}
 			out += clen;
 			rem -= clen;
