@@ -1480,7 +1480,8 @@ br_ssl_hs_client_run(void *t0ctx)
 				/* get16 */
 
 	size_t addr = (size_t)T0_POP();
-	T0_PUSH(*(uint16_t *)(void *)((unsigned char *)ENG + addr));
+	unsigned char *p = (unsigned char *)ENG + addr;
+	T0_PUSH(((uint32_t)p[0] << 8) | p[1]);
 
 				}
 				break;
@@ -1488,7 +1489,11 @@ br_ssl_hs_client_run(void *t0ctx)
 				/* get32 */
 
 	size_t addr = (size_t)T0_POP();
-	T0_PUSH(*(uint32_t *)(void *)((unsigned char *)ENG + addr));
+	unsigned char *p = (unsigned char *)ENG + addr;
+	T0_PUSH(((uint32_t)p[0] << 24)
+		| ((uint32_t)p[1] << 16)
+		| ((uint32_t)p[2] << 8)
+		| p[3]);
 
 				}
 				break;
@@ -1522,9 +1527,12 @@ br_ssl_hs_client_run(void *t0ctx)
 				/* memcpy */
 
 	size_t len = (size_t)T0_POP();
-	void *src = (unsigned char *)ENG + (size_t)T0_POP();
-	void *dst = (unsigned char *)ENG + (size_t)T0_POP();
-	memcpy(dst, src, len);
+	unsigned char *src = (unsigned char *)ENG + (size_t)T0_POP();
+	unsigned char *dst = (unsigned char *)ENG + (size_t)T0_POP();
+	while (len > 0) {
+		*dst++ = *src++;
+		len--;
+	}
 
 				}
 				break;
@@ -1593,7 +1601,15 @@ br_ssl_hs_client_run(void *t0ctx)
 		if ((size_t)len < clen) {
 			clen = (size_t)len;
 		}
-		memcpy((unsigned char *)ENG + addr, ENG->hbuf_in, clen);
+		{
+			unsigned char *dst = (unsigned char *)ENG + addr;
+			unsigned char *src = ENG->hbuf_in;
+			size_t u;
+
+			for (u = 0; u < clen; u ++) {
+				dst[u] = src[u];
+			}
+		}
 		if (ENG->record_type_in == BR_SSL_HANDSHAKE) {
 			br_multihash_update(&ENG->mhash, ENG->hbuf_in, clen);
 		}
@@ -1640,7 +1656,10 @@ br_ssl_hs_client_run(void *t0ctx)
 				/* set16 */
 
 	size_t addr = (size_t)T0_POP();
-	*(uint16_t *)(void *)((unsigned char *)ENG + addr) = (uint16_t)T0_POP();
+	uint32_t x = T0_POP();
+	unsigned char *p = (unsigned char *)ENG + addr;
+	p[0] = (unsigned char)(x >> 8);
+	p[1] = (unsigned char)x;
 
 				}
 				break;
@@ -1648,7 +1667,12 @@ br_ssl_hs_client_run(void *t0ctx)
 				/* set32 */
 
 	size_t addr = (size_t)T0_POP();
-	*(uint32_t *)(void *)((unsigned char *)ENG + addr) = (uint32_t)T0_POP();
+	uint32_t x = T0_POP();
+	unsigned char *p = (unsigned char *)ENG + addr;
+	p[0] = (unsigned char)(x >> 24);
+	p[1] = (unsigned char)(x >> 16);
+	p[2] = (unsigned char)(x >> 8);
+	p[3] = (unsigned char)x;
 
 				}
 				break;
@@ -1891,7 +1915,15 @@ br_ssl_hs_client_run(void *t0ctx)
 		if ((size_t)len < clen) {
 			clen = (size_t)len;
 		}
-		memcpy(ENG->hbuf_out, (unsigned char *)ENG + addr, clen);
+		{
+			unsigned char *dst = ENG->hbuf_out;
+			unsigned char *src = (unsigned char *)ENG + addr;
+			size_t u;
+
+			for (u = 0; u < clen; u ++) {
+				dst[u] = src[u];
+			}
+		}
 		if (ENG->record_type_out == BR_SSL_HANDSHAKE) {
 			br_multihash_update(&ENG->mhash, ENG->hbuf_out, clen);
 		}

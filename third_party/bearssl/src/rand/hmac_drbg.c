@@ -64,7 +64,13 @@ br_hmac_drbg_generate(br_hmac_drbg_context *ctx, void *out, size_t len)
 		if (clen > len) {
 			clen = len;
 		}
-		memcpy(buf, ctx->V, clen);
+		{
+			size_t u;
+
+			for (u = 0; u < clen; u ++) {
+				buf[u] = ctx->V[u];
+			}
+		}
 		buf += clen;
 		len -= clen;
 	}
