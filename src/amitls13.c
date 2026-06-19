@@ -124,7 +124,6 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
     static const uint16_t suites[] = {
-        BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
         BR_TLS_RSA_WITH_AES_128_CBC_SHA256,
         BR_TLS_RSA_WITH_AES_128_CBC_SHA
     };
