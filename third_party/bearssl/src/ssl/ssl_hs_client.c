@@ -997,11 +997,13 @@ br_ssl_hs_client_run(void *t0ctx)
 	t0_next:
 		t0x = T0_NEXT(&ip);
 #ifdef AMITLS13_DEBUG
-		if (dbg_steps < 512) {
+		if (dbg_steps >= 480 && dbg_steps < 2048) {
 			hs_dbg("HS op step=");
 			hs_dbg_num((long)dbg_steps);
 			hs_dbg(" op=");
 			hs_dbg_num((long)t0x);
+			hs_dbg(" ip=");
+			hs_dbg_num((long)(ip - &t0_codeblock[0]));
 			hs_dbg(" dp=");
 			hs_dbg_num((long)dp);
 			hs_dbg(" rp=");
