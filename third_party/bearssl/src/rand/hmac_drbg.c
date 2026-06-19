@@ -23,6 +23,40 @@
  */
 
 #include "inner.h"
+#ifdef AMITLS13_DEBUG
+#include <libraries/dos.h>
+#include <proto/dos.h>
+#include <string.h>
+static void drbg_dbg(const char *s)
+{
+	if (s) {
+		Write(Output(), (APTR)s, strlen(s));
+	}
+}
+static void drbg_dbg_num(long n)
+{
+	char b[16];
+	char t[14];
+	int i = 0;
+	int p = 0;
+	if (n < 0) {
+		drbg_dbg("-");
+		n = -n;
+	}
+	do {
+		t[i++] = (char)('0' + (n % 10));
+		n /= 10;
+	} while (n && i < 13);
+	while (i > 0) {
+		b[p++] = t[--i];
+	}
+	b[p] = 0;
+	drbg_dbg(b);
+}
+#else
+#define drbg_dbg(x) ((void)0)
+#define drbg_dbg_num(x) ((void)0)
+#endif
 
 /* see bearssl.h */
 void
@@ -44,22 +78,61 @@ void
 br_hmac_drbg_generate(br_hmac_drbg_context *ctx, void *out, size_t len)
 {
 	const br_hash_class *dig;
-	br_hmac_key_context kc;
-	br_hmac_context hc;
+	union {
+		uint32_t align;
+		br_hmac_key_context ctx;
+	} kc_u;
+	union {
+		uint32_t align;
+		br_hmac_context ctx;
+	} hc_u;
+	br_hmac_key_context *kc = &kc_u.ctx;
+	br_hmac_context *hc = &hc_u.ctx;
 	size_t hlen;
 	unsigned char *buf;
 	unsigned char x;
 
+#ifdef AMITLS13_DEBUG
+	drbg_dbg("DRBG enter ctx=");
+	drbg_dbg_num((long)ctx);
+	drbg_dbg(" out=");
+	drbg_dbg_num((long)out);
+	drbg_dbg(" len=");
+	drbg_dbg_num((long)len);
+	drbg_dbg(" kc=");
+	drbg_dbg_num((long)kc);
+	drbg_dbg(" hc=");
+	drbg_dbg_num((long)hc);
+	drbg_dbg("\n");
+#endif
 	dig = ctx->digest_class;
 	hlen = br_digest_size(dig);
-	br_hmac_key_init(&kc, dig, ctx->K, hlen);
+#ifdef AMITLS13_DEBUG
+	drbg_dbg("DRBG before keyinit\n");
+#endif
+	br_hmac_key_init(kc, dig, ctx->K, hlen);
+#ifdef AMITLS13_DEBUG
+	drbg_dbg("DRBG after keyinit\n");
+#endif
 	buf = out;
 	while (len > 0) {
 		size_t clen;
 
-		br_hmac_init(&hc, &kc, 0);
-		br_hmac_update(&hc, ctx->V, hlen);
-		br_hmac_out(&hc, ctx->V);
+#ifdef AMITLS13_DEBUG
+		drbg_dbg("DRBG loop before hmac_init\n");
+#endif
+		br_hmac_init(hc, kc, 0);
+#ifdef AMITLS13_DEBUG
+		drbg_dbg("DRBG loop after hmac_init\n");
+#endif
+		br_hmac_update(hc, ctx->V, hlen);
+#ifdef AMITLS13_DEBUG
+		drbg_dbg("DRBG loop after update\n");
+#endif
+		br_hmac_out(hc, ctx->V);
+#ifdef AMITLS13_DEBUG
+		drbg_dbg("DRBG loop after out\n");
+#endif
 		clen = hlen;
 		if (clen > len) {
 			clen = len;
@@ -82,15 +155,21 @@ br_hmac_drbg_generate(br_hmac_drbg_context *ctx, void *out, size_t len)
 	 * initial key, and we don't want to push another one on the
 	 * stack, so we inline that update() call here.
 	 */
-	br_hmac_init(&hc, &kc, 0);
-	br_hmac_update(&hc, ctx->V, hlen);
+#ifdef AMITLS13_DEBUG
+	drbg_dbg("DRBG final before hmac_init\n");
+#endif
+	br_hmac_init(hc, kc, 0);
+	br_hmac_update(hc, ctx->V, hlen);
 	x = 0x00;
-	br_hmac_update(&hc, &x, 1);
-	br_hmac_out(&hc, ctx->K);
-	br_hmac_key_init(&kc, dig, ctx->K, hlen);
-	br_hmac_init(&hc, &kc, 0);
-	br_hmac_update(&hc, ctx->V, hlen);
-	br_hmac_out(&hc, ctx->V);
+	br_hmac_update(hc, &x, 1);
+	br_hmac_out(hc, ctx->K);
+	br_hmac_key_init(kc, dig, ctx->K, hlen);
+	br_hmac_init(hc, kc, 0);
+	br_hmac_update(hc, ctx->V, hlen);
+	br_hmac_out(hc, ctx->V);
+#ifdef AMITLS13_DEBUG
+	drbg_dbg("DRBG done\n");
+#endif
 }
 
 /* see bearssl.h */
