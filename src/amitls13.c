@@ -103,13 +103,22 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
 static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 {
     struct AmiTLS13Context *ctx;
+    size_t done;
     LONG r;
+
     ctx=(struct AmiTLS13Context *)opaque;
     dbg("TLS cb write len="); dbg_num((LONG)len); dbg("\n");
-    r=amitls13_tcp_send(ctx->fd, buf, (ULONG)len);
-    dbg("TLS cb write ret="); dbg_num(r); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
-    if(r<=0) return -1;
-    return (int)r;
+    done=0;
+    while(done<len){
+        r=amitls13_tcp_send(ctx->fd, buf+done, (ULONG)(len-done));
+        if(r<=0){
+            dbg("TLS cb write failed done="); dbg_num((LONG)done); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
+            return -1;
+        }
+        done+=(size_t)r;
+    }
+    dbg("TLS cb write done="); dbg_num((LONG)done); dbg("\n");
+    return (int)done;
 }
 
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
