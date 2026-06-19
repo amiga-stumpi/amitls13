@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     AmiTLS13_Exit();
 
     if(rc == AMITLS13_ERR_TLS_DISABLED){
-        out("TLS backend not imported yet. BearSSL is required for HTTPS.\n");
+        out("TLS setup failed. Check TLS debug line above.\n");
         return 30;
     }
     if(rc < 0){ out("GET failed: "); out_num(rc); out(" Socket Errno: "); out_num(amitls13_socket_errno()); out("\n"); return 40; }

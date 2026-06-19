@@ -21,6 +21,23 @@ static void dbg(const char *s)
 #endif
 }
 
+static void dbg_num(LONG n)
+{
+#ifdef AMITLS13_DEBUG
+    char b[16];
+    char t[14];
+    WORD i=0;
+    WORD p=0;
+    if(n<0){ dbg("-"); n=-n; }
+    do{ t[i++]=(char)('0'+(n%10)); n/=10; }while(n && i<13);
+    while(i>0) b[p++]=t[--i];
+    b[p]=0;
+    dbg(b);
+#else
+    (void)n;
+#endif
+}
+
 static void fill_entropy(ULONG *seed)
 {
     struct DateStamp ds;
@@ -93,7 +110,10 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 
     dbg("TLS client reset\n");
     if(!br_ssl_client_reset(&ctx->sc, host, 0)){
-        ctx->last_error=AMITLS13_ERR_TLS_DISABLED;
+        ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
+        dbg("TLS client reset failed brerr=");
+        dbg_num(ctx->last_error);
+        dbg("\n");
         return AMITLS13_ERR_TLS_DISABLED;
     }
     dbg("TLS set buffer\n");
