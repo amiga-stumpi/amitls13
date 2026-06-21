@@ -23,6 +23,7 @@
  */
 
 #include "inner.h"
+#include "amitls13.h"
 #ifdef AMITLS13_DEBUG
 #include <libraries/dos.h>
 #include <proto/dos.h>
@@ -30,7 +31,7 @@
 static void hmac_dbg(const char *s)
 {
 	if (s) {
-		Write(Output(), (APTR)s, strlen(s));
+		AmiTLS13_DebugWrite(s);
 	}
 }
 static void hmac_dbg_num(long n)

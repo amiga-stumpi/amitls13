@@ -23,6 +23,7 @@
  */
 
 #include "inner.h"
+#include "amitls13.h"
 
 #ifdef AMITLS13_DEBUG
 #include <libraries/dos.h>
@@ -33,7 +34,7 @@ static void
 rpubdbg(const char *s)
 {
 	if (s) {
-		Write(Output(), (APTR)s, strlen(s));
+		AmiTLS13_DebugWrite(s);
 	}
 }
 #else

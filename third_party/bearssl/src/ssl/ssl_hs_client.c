@@ -71,6 +71,7 @@ void br_ssl_hs_client_run(void *t0ctx);
 #include <string.h>
 
 #include "inner.h"
+#include "amitls13.h"
 #ifdef AMITLS13_DEBUG
 #include <libraries/dos.h>
 #include <proto/dos.h>
@@ -78,7 +79,7 @@ void br_ssl_hs_client_run(void *t0ctx);
 static void hs_dbg(const char *s)
 {
 	if (s) {
-		Write(Output(), (APTR)s, strlen(s));
+		AmiTLS13_DebugWrite(s);
 	}
 }
 static void hs_dbg_num(long n)
@@ -946,15 +947,15 @@ br_ssl_hs_client_run(void *t0ctx)
 
 #define T0_LOCAL(x)    (*(rp - 2 - (x)))
 #define T0_POP()       (*-- dp)
-#define T0_POPi()      (*(int32_t *)(-- dp))
+#define T0_POPi()      ((int32_t)(*-- dp))
 #define T0_PEEK(x)     (*(dp - 1 - (x)))
-#define T0_PEEKi(x)    (*(int32_t *)(dp - 1 - (x)))
+#define T0_PEEKi(x)    ((int32_t)(*(dp - 1 - (x))))
 #define T0_PUSH(v)     do { *dp = (v); dp ++; } while (0)
-#define T0_PUSHi(v)    do { *(int32_t *)dp = (v); dp ++; } while (0)
+#define T0_PUSHi(v)    do { *dp = (uint32_t)(int32_t)(v); dp ++; } while (0)
 #define T0_RPOP()      (*-- rp)
-#define T0_RPOPi()     (*(int32_t *)(-- rp))
+#define T0_RPOPi()     ((int32_t)(*-- rp))
 #define T0_RPUSH(v)    do { *rp = (v); rp ++; } while (0)
-#define T0_RPUSHi(v)   do { *(int32_t *)rp = (v); rp ++; } while (0)
+#define T0_RPUSHi(v)   do { *rp = (uint32_t)(int32_t)(v); rp ++; } while (0)
 #define T0_ROLL(x)     do { \
 	size_t t0len = (size_t)(x); \
 	uint32_t t0tmp = *(dp - 1 - t0len); \

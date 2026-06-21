@@ -12,13 +12,32 @@
 #include "socket_os13.h"
 #include "x509_insecure.h"
 
-static void dbg(const char *s)
+#ifndef AMITLS13_TLS_SEND_CHUNK
+#define AMITLS13_TLS_SEND_CHUNK 512UL
+#endif
+
+static BPTR g_debug_output = 0;
+
+void AmiTLS13_SetDebugOutput(BPTR fh)
+{
+    g_debug_output = fh;
+}
+
+void AmiTLS13_DebugWrite(const char *s)
 {
 #ifdef AMITLS13_DEBUG
-    if(s) Write(Output(), (APTR)s, strlen(s));
+    BPTR out;
+    if(!s) return;
+    out = g_debug_output ? g_debug_output : Output();
+    Write(out, (APTR)s, strlen(s));
 #else
     (void)s;
 #endif
+}
+
+static void dbg(const char *s)
+{
+    AmiTLS13_DebugWrite(s);
 }
 
 static void dbg_num(LONG n)
@@ -38,6 +57,7 @@ static void dbg_num(LONG n)
 #endif
 }
 
+#ifdef AMITLS13_DEBUG
 static void dbg_hex_byte(UBYTE v)
 {
 #ifdef AMITLS13_DEBUG
@@ -51,6 +71,7 @@ static void dbg_hex_byte(UBYTE v)
     (void)v;
 #endif
 }
+#endif
 
 static void dbg_dump_bytes(const char *prefix, const UBYTE *buf, ULONG len)
 {
@@ -85,6 +106,15 @@ static void dbg_brerr(LONG e)
 #endif
 }
 
+static void trace(const char *s)
+{
+#ifdef AMITLS13_TRACE
+    if(s) Write(Output(), (APTR)s, strlen(s));
+#else
+    (void)s;
+#endif
+}
+
 static void fill_entropy(ULONG *seed)
 {
     struct DateStamp ds;
@@ -112,6 +142,7 @@ struct AmiTLS13Context {
     ULONG flags;
     UBYTE tls_active;
     UBYTE tls_broken;
+    UBYTE suppress_alert_writes;
     br_ssl_client_context sc;
     br_x509_minimal_context xc;
     br_sslio_context ioc;
@@ -119,22 +150,29 @@ struct AmiTLS13Context {
     UBYTE iobuf[BR_SSL_BUFSIZE_BIDI];
 };
 
+
 static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
 {
     struct AmiTLS13Context *ctx;
+    LONG fd;
     LONG r;
-    ctx=(struct AmiTLS13Context *)opaque;
+    trace("TRACE cb read enter\n");
+    ctx = (struct AmiTLS13Context *)opaque;
+    if(!ctx) return -1;
+    fd=ctx->fd;
+    trace("TRACE cb read fd\n");
+    if(fd < 0) return -1;
     {
         UWORD tries;
         for(tries=0; tries<80; tries++){
-            r=amitls13_tcp_recv(ctx->fd, buf, (ULONG)len);
+            r=amitls13_tcp_recv(fd, buf, (ULONG)len);
             if(r>0) return (int)r;
             if(r<0) break;
             if(amitls13_socket_errno()!=0) break;
             {
                 LONG wr;
                 dbg("TLS cb read empty wait\n");
-                wr = amitls13_tcp_wait_read(ctx->fd, 250000UL);
+                wr = amitls13_tcp_wait_read(fd, 250000UL);
                 dbg("TLS cb wait ret="); dbg_num(wr); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
                 if(wr < 0) break;
             }
@@ -147,21 +185,38 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
 static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 {
     struct AmiTLS13Context *ctx;
+    LONG fd;
     size_t done;
+    ULONG chunk;
     LONG r;
 
-    ctx=(struct AmiTLS13Context *)opaque;
+    trace("TRACE cb write enter\n");
+    ctx = (struct AmiTLS13Context *)opaque;
+    if(!ctx) return -1;
+    fd=ctx->fd;
+    trace("TRACE cb write fd\n");
+    if(fd < 0){ trace("TRACE cb write nofd\n"); return -1; }
+    trace("TRACE cb write havefd\n");
     dbg("TLS cb write len="); dbg_num((LONG)len); dbg("\n");
     dbg_dump_bytes("TLS cb write bytes=", buf, (ULONG)len);
+    if(ctx->suppress_alert_writes && len >= 1 && buf[0] == 0x15){
+        dbg("TLS cb write alert suppressed\n");
+        return (int)len;
+    }
     done=0;
     while(done<len){
         UWORD tries;
         r=0;
         for(tries=0; tries<80; tries++){
-            r=amitls13_tcp_send(ctx->fd, buf+done, (ULONG)(len-done));
+            chunk = (ULONG)(len - done);
+            if(chunk > AMITLS13_TLS_SEND_CHUNK) chunk = AMITLS13_TLS_SEND_CHUNK;
+            dbg("TLS cb send begin fd="); dbg_num(fd); dbg(" done="); dbg_num((LONG)done); dbg(" chunk="); dbg_num((LONG)chunk); dbg("\n");
+            r=amitls13_tcp_send(fd, buf+done, chunk);
             if(r>0) break;
             dbg("TLS cb write wait done="); dbg_num((LONG)done); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
-            if(amitls13_tcp_wait_write(ctx->fd, 250000UL) < 0) break;
+            { LONG wr = amitls13_tcp_wait_write(fd, 250000UL);
+              dbg("TLS cb write wait ret="); dbg_num(wr); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
+              if(wr < 0) break; }
         }
         if(r<=0){
             dbg("TLS cb write failed done="); dbg_num((LONG)done); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
@@ -188,6 +243,7 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     char host_copy[256];
     UWORD hi;
 
+    trace("TRACE tls_start enter\n");
     if(!host) return AMITLS13_ERR_URL;
     hi=0;
     while(host[hi] && hi<255){
@@ -197,6 +253,7 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     host_copy[hi]=0;
     if(host[hi]) return AMITLS13_ERR_URL;
 
+    trace("TRACE tls init\n");
     dbg("TLS init full\n");
     br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
     dbg("TLS RSA suites active\n");
@@ -207,6 +264,7 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     amitls13_x509_insecure_init(&ctx->ix);
     br_ssl_engine_set_x509(&ctx->sc.eng, &ctx->ix.vtable);
 
+    trace("TRACE tls entropy\n");
     dbg("TLS inject entropy\n");
     fill_entropy(seed);
     br_ssl_engine_inject_entropy(&ctx->sc.eng, seed, sizeof(seed));
@@ -217,6 +275,7 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     dbg("TLS set buffer\n");
     br_ssl_engine_set_buffer(&ctx->sc.eng, ctx->iobuf, sizeof(ctx->iobuf), 1);
 
+    trace("TRACE tls reset\n");
     dbg("TLS client reset sni hostlen="); dbg_num((LONG)hi); dbg("\n");
     if(!br_ssl_client_reset(&ctx->sc, host_copy, 0)){
         ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
@@ -225,10 +284,12 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
         dbg("\n");
         return AMITLS13_ERR_TLS_DISABLED;
     }
+    trace("TRACE tls reset ok\n");
     dbg("TLS reset ok\n");
     dbg("TLS sslio init\n");
     br_sslio_init(&ctx->ioc, &ctx->sc.eng, tls_sock_read, ctx, tls_sock_write, ctx);
     ctx->tls_active=1;
+    trace("TRACE tls_start leave\n");
     return AMITLS13_OK;
 }
 
@@ -248,11 +309,13 @@ struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG fla
     LONG fd;
     LONG rc;
 
+    trace("TRACE connect alloc\n");
     ctx=(struct AmiTLS13Context *)AllocMem(sizeof(*ctx), MEMF_PUBLIC|MEMF_CLEAR);
     if(!ctx) return 0;
-    ctx->fd=-1;
+    fd=-1;
     ctx->flags=flags;
 
+    trace("TRACE tcp connect\n");
     rc=amitls13_tcp_connect(host, port, &fd);
     if(rc!=AMITLS13_OK){
         ctx->last_error=rc;
@@ -260,6 +323,7 @@ struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG fla
         return 0;
     }
 
+    trace("TRACE tcp connected\n");
     ctx->fd=fd;
     ctx->last_error=AMITLS13_OK;
     return ctx;
@@ -270,14 +334,21 @@ LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len)
     int r;
     if(!ctx || ctx->fd<0) return AMITLS13_ERR_IO;
     if(ctx->tls_active){
+        trace("TRACE write tls active\n");
         dbg("TLS write_all begin len="); dbg_num((LONG)len); dbg("\n");
+        trace("TRACE write_all call\n");
         r=br_sslio_write_all(&ctx->ioc, buf, (size_t)len);
-        dbg("TLS write_all ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
-        if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        trace("TRACE write_all ret\n");
+        ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
+        dbg("TLS write_all ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(ctx->last_error); dbg("\n");
+        if(r!=0 || ctx->last_error!=BR_ERR_OK){ ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        trace("TRACE flush call\n");
         dbg("TLS flush begin\n");
         r=br_sslio_flush(&ctx->ioc);
-        dbg("TLS flush ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(br_ssl_engine_last_error(&ctx->sc.eng)); dbg("\n");
-        if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        trace("TRACE flush ret\n");
+        ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
+        dbg("TLS flush ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(ctx->last_error); dbg("\n");
+        if(r!=0 || ctx->last_error!=BR_ERR_OK){ ctx->tls_broken=1; return AMITLS13_ERR_IO; }
         return (LONG)len;
     }
     return amitls13_tcp_send(ctx->fd, buf, len);
@@ -298,8 +369,23 @@ LONG AmiTLS13_Read(struct AmiTLS13Context *ctx, UBYTE *buf, ULONG maxlen)
 void AmiTLS13_Close(struct AmiTLS13Context *ctx)
 {
     if(!ctx) return;
-    if(ctx->tls_active && !ctx->tls_broken && ctx->last_error==AMITLS13_OK) br_sslio_close(&ctx->ioc);
-    if(ctx->fd>=0) amitls13_tcp_close(ctx->fd);
+    dbg("AmiTLS13 close tls="); dbg_num((LONG)ctx->tls_active); dbg(" broken="); dbg_num((LONG)ctx->tls_broken); dbg(" last="); dbg_brerr(ctx->last_error); dbg("\n");
+    /*
+       HTTP/1.0 responses use TCP close as EOF. Some servers have already
+       closed their side when BearSSL tries to emit close_notify here; on
+       OS1.3 bsdsocket stacks that can turn a successful transfer into a
+       send stall during cleanup. For this small client wrapper, closing the
+       raw socket after a fully-read response is the safer behaviour.
+    */
+    if(ctx->fd>=0){
+        dbg("AmiTLS13 raw close fd\n");
+        amitls13_tcp_close(ctx->fd);
+        ctx->fd=-1;
+    }
+    #ifdef AMITLS13_DEBUG
+    if(ctx->tls_broken){ dbg("AmiTLS13 leak broken ctx for diagnosis\n"); return; }
+#endif
+    dbg("AmiTLS13 free ctx\n");
     FreeMem(ctx, sizeof(*ctx));
 }
 
@@ -308,50 +394,83 @@ LONG AmiTLS13_GetLastError(struct AmiTLS13Context *ctx)
     return ctx ? ctx->last_error : AMITLS13_ERR_IO;
 }
 
+LONG AmiTLS13_SocketErrno(void)
+{
+    return amitls13_socket_errno();
+}
+
 LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
 {
     AmiTLS13Url parsed;
     struct AmiTLS13Context *ctx;
     BPTR fh;
-    char req[420];
-    UBYTE buf[1024];
+    char *req;
+    UBYTE *buf;
     LONG n;
     LONG total;
     LONG rc;
 
+    ctx = 0;
+    fh = 0;
+    req = 0;
+    buf = 0;
+    total = 0;
+
+    trace("TRACE httpget parse\n");
     if(amitls13_parse_url(url, &parsed)!=AMITLS13_OK) return AMITLS13_ERR_URL;
 
-    ctx=AmiTLS13_Connect(parsed.host, parsed.port, flags);
-    if(!ctx) return AMITLS13_ERR_CONNECT;
-
-    if(parsed.https){
-        rc=tls_start(ctx, parsed.host);
-        if(rc!=AMITLS13_OK){
-            AmiTLS13_Close(ctx);
-            return rc;
-        }
+    req = (char *)AllocMem(512, MEMF_PUBLIC|MEMF_CLEAR);
+    buf = (UBYTE *)AllocMem(1024, MEMF_PUBLIC);
+    if(!req || !buf){
+        rc = AMITLS13_ERR_IO;
+        goto cleanup;
     }
 
+    trace("TRACE httpget connect\n");
+    ctx=AmiTLS13_Connect(parsed.host, parsed.port, flags);
+    if(!ctx){ rc = AMITLS13_ERR_CONNECT; goto cleanup; }
+
+    if(parsed.https){
+        trace("TRACE httpget tls\n");
+        rc=tls_start(ctx, parsed.host);
+        if(rc!=AMITLS13_OK) goto cleanup;
+    }
+
+    trace("TRACE httpget request build\n");
     strcpy(req, "GET ");
     strcat(req, parsed.path);
     strcat(req, " HTTP/1.0\r\nHost: ");
     strcat(req, parsed.host);
     strcat(req, "\r\nConnection: close\r\n\r\n");
     if(parsed.https) dbg("TLS write request\n");
+    trace("TRACE httpget write\n");
     if(AmiTLS13_Write(ctx, (const UBYTE *)req, strlen(req))<0){
-        AmiTLS13_Close(ctx);
-        return AMITLS13_ERR_IO;
+        rc = AMITLS13_ERR_IO;
+        goto cleanup;
     }
 
-    fh=0;
+    trace("TRACE httpget open out\n");
     if(outfile && outfile[0]) fh=Open((STRPTR)outfile, MODE_NEWFILE);
-    total=0;
-    if(parsed.https) dbg("TLS read response\n");
-    while((n=AmiTLS13_Read(ctx, buf, sizeof(buf)))>0){
+    if(parsed.https){
+        dbg("TLS read response\n");
+        ctx->suppress_alert_writes = 1;
+    }
+    trace("TRACE httpget read loop\n");
+    while((n=AmiTLS13_Read(ctx, buf, 1024))>0){
         total+=n;
         if(fh) Write(fh, buf, n);
     }
+    trace("TRACE httpget read done\n");
+    rc = total;
+
+cleanup:
     if(fh) Close(fh);
-    AmiTLS13_Close(ctx);
-    return total;
+    if(ctx){
+        trace("TRACE httpget close\n");
+        AmiTLS13_Close(ctx);
+    }
+    if(buf) FreeMem(buf, 1024);
+    if(req) FreeMem(req, 512);
+    trace("TRACE httpget done\n");
+    return rc;
 }

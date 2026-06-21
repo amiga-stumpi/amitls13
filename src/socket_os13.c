@@ -7,6 +7,7 @@
 
 struct Library *SocketBase = 0;
 static LONG g_last_errno = 0;
+static UWORD g_socket_open_count = 0;
 
 struct hostent {
     char *h_name;
@@ -37,97 +38,73 @@ static void fd_set_one(ULONG *fds, LONG fd)
 }
 
 
+LONG amitls13_bsdsocket_socket(LONG domain, LONG type, LONG protocol);
+LONG amitls13_bsdsocket_connect(LONG fd, struct sockaddr *addr, LONG len);
+LONG amitls13_bsdsocket_send(LONG fd, const UBYTE *buf, ULONG len);
+LONG amitls13_bsdsocket_recv(LONG fd, UBYTE *buf, ULONG len);
+LONG amitls13_bsdsocket_close(LONG fd);
+LONG amitls13_bsdsocket_waitselect(LONG nfds, ULONG *readfds, ULONG *writefds, ULONG *exceptfds, struct timeval *tv, ULONG *signals);
+LONG amitls13_bsdsocket_errno(void);
+struct hostent *amitls13_bsdsocket_gethostbyname(const char *name);
+
 static LONG call_socket(LONG domain, LONG type, LONG protocol)
 {
-    register LONG d0 __asm("d0") = domain;
-    register LONG d1 __asm("d1") = type;
-    register LONG d2 __asm("d2") = protocol;
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-30:W)" : "+r"(d0) : "r"(d1), "r"(d2), "r"(a6) : "a0", "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_socket(domain, type, protocol);
 }
 
 static LONG call_connect(LONG fd, struct sockaddr *addr, LONG len)
 {
-    register LONG d0 __asm("d0") = fd;
-    register struct sockaddr *a0 __asm("a0") = addr;
-    register LONG d1 __asm("d1") = len;
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-54:W)" : "+r"(d0) : "r"(a0), "r"(d1), "r"(a6) : "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_connect(fd, addr, len);
 }
 
 static LONG call_send(LONG fd, const UBYTE *buf, ULONG len)
 {
-    register LONG d0 __asm("d0") = fd;
-    register const UBYTE *a0 __asm("a0") = buf;
-    register ULONG d1 __asm("d1") = len;
-    register LONG d2 __asm("d2") = 0;
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-66:W)" : "+r"(d0) : "r"(a0), "r"(d1), "r"(d2), "r"(a6) : "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_send(fd, buf, len);
 }
 
 static LONG call_recv(LONG fd, UBYTE *buf, ULONG len)
 {
-    register LONG d0 __asm("d0") = fd;
-    register UBYTE *a0 __asm("a0") = buf;
-    register ULONG d1 __asm("d1") = len;
-    register LONG d2 __asm("d2") = 0;
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-78:W)" : "+r"(d0) : "r"(a0), "r"(d1), "r"(d2), "r"(a6) : "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_recv(fd, buf, len);
 }
 
 static LONG call_close(LONG fd)
 {
-    register LONG d0 __asm("d0") = fd;
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-120:W)" : "+r"(d0) : "r"(a6) : "d1", "a0", "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_close(fd);
 }
 
 
 static LONG call_waitselect(LONG nfds, ULONG *readfds, ULONG *writefds, ULONG *exceptfds, struct timeval *tv, ULONG *signals)
 {
-    register LONG d0 __asm("d0") = nfds;
-    register ULONG *a0 __asm("a0") = readfds;
-    register ULONG *a1 __asm("a1") = writefds;
-    register ULONG *a2 __asm("a2") = exceptfds;
-    register struct timeval *a3 __asm("a3") = tv;
-    register ULONG *d1 __asm("d1") = signals;
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-126:W)" : "+r"(d0) : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(d1), "r"(a6) : "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_waitselect(nfds, readfds, writefds, exceptfds, tv, signals);
 }
 
 static LONG call_errno(void)
 {
-    register LONG d0 __asm("d0");
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-162:W)" : "=r"(d0) : "r"(a6) : "d1", "a0", "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_errno();
 }
 
 static struct hostent *call_gethostbyname(const char *name)
 {
-    register const char *a0 __asm("a0") = name;
-    register struct hostent *d0 __asm("d0");
-    register struct Library *a6 __asm("a6") = SocketBase;
-    __asm volatile("jsr a6@(-210:W)" : "=r"(d0) : "r"(a0), "r"(a6) : "d1", "a1", "cc", "memory");
-    return d0;
+    return amitls13_bsdsocket_gethostbyname(name);
 }
 
 LONG amitls13_socket_init(void)
 {
-    if(SocketBase) return AMITLS13_OK;
+    if(SocketBase){
+        g_socket_open_count++;
+        return AMITLS13_OK;
+    }
     SocketBase = OpenLibrary((STRPTR)"bsdsocket.library", 4);
-    return SocketBase ? AMITLS13_OK : AMITLS13_ERR_NO_SOCKETLIB;
+    if(!SocketBase) return AMITLS13_ERR_NO_SOCKETLIB;
+    g_socket_open_count = 1;
+    return AMITLS13_OK;
 }
 
 void amitls13_socket_exit(void)
 {
-    if(SocketBase){
+    if(!SocketBase) return;
+    if(g_socket_open_count > 0) g_socket_open_count--;
+    if(g_socket_open_count == 0){
         CloseLibrary(SocketBase);
         SocketBase = 0;
     }
@@ -148,6 +125,14 @@ LONG amitls13_tcp_connect(const char *host, UWORD port, LONG *out_fd)
 
     fd = call_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(fd < 0){ g_last_errno=call_errno(); return AMITLS13_ERR_SOCKET; }
+    if(fd == 0){
+        LONG fd2;
+        fd2 = call_socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if(fd2 >= 0){
+            call_close(fd);
+            fd = fd2;
+        }
+    }
 
     memset(&sa, 0, sizeof(sa));
     sa.sin_len = sizeof(sa);
@@ -168,14 +153,18 @@ LONG amitls13_tcp_connect(const char *host, UWORD port, LONG *out_fd)
 
 LONG amitls13_tcp_send(LONG fd, const UBYTE *buf, ULONG len)
 {
-    LONG r=call_send(fd, buf, len);
+    LONG r;
+    g_last_errno=0;
+    r=call_send(fd, buf, len);
     if(r<0) g_last_errno=call_errno();
     return r;
 }
 
 LONG amitls13_tcp_recv(LONG fd, UBYTE *buf, ULONG maxlen)
 {
-    LONG r=call_recv(fd, buf, maxlen);
+    LONG r;
+    g_last_errno=0;
+    r=call_recv(fd, buf, maxlen);
     if(r<0) g_last_errno=call_errno();
     return r;
 }
@@ -191,6 +180,7 @@ LONG amitls13_tcp_wait_read(LONG fd, ULONG micros)
     fd_set_one(rfds, fd);
     tv.tv_sec = (LONG)(micros / 1000000UL);
     tv.tv_usec = (LONG)(micros % 1000000UL);
+    g_last_errno = 0;
     r = call_waitselect(fd + 1, rfds, 0, 0, &tv, 0);
     if(r < 0) g_last_errno = call_errno();
     return r;
@@ -207,6 +197,7 @@ LONG amitls13_tcp_wait_write(LONG fd, ULONG micros)
     fd_set_one(wfds, fd);
     tv.tv_sec = (LONG)(micros / 1000000UL);
     tv.tv_usec = (LONG)(micros % 1000000UL);
+    g_last_errno = 0;
     r = call_waitselect(fd + 1, 0, wfds, 0, &tv, 0);
     if(r < 0) g_last_errno = call_errno();
     return r;
@@ -214,7 +205,6 @@ LONG amitls13_tcp_wait_write(LONG fd, ULONG micros)
 
 LONG amitls13_socket_errno(void)
 {
-    if(SocketBase) g_last_errno=call_errno();
     return g_last_errno;
 }
 

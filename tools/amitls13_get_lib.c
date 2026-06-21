@@ -1,12 +1,15 @@
 #include <exec/types.h>
+#include <exec/libraries.h>
 #include <libraries/dos.h>
+#include <proto/exec.h>
 #include <proto/dos.h>
 #include <string.h>
 #include "amitls13.h"
-#include "http_url.h"
+#include "amitls13_libbase.h"
 #include "socket_os13.h"
 
 LONG __stack = 131072;
+struct Library *AmiTLS13Base = 0;
 
 static BPTR g_tool_output = 0;
 
@@ -22,8 +25,7 @@ int main(int argc, char **argv)
     WORD argi;
 
     if(argc < 2){
-        out("Usage: amitls13_get [LOG=FILE] URL [OUTFILE]\n");
-        out("Phase 1 note: HTTPS uses BearSSL with temporary insecure certificate handling.\n");
+        out("Usage: amitls13_get_lib [LOG=FILE] URL [OUTFILE]\n");
         return 10;
     }
 
@@ -34,16 +36,16 @@ int main(int argc, char **argv)
         argi++;
     }
     if(argi >= argc){
-        out("Usage: amitls13_get [LOG=FILE] URL [OUTFILE]\n");
+        out("Usage: amitls13_get_lib [LOG=FILE] URL [OUTFILE]\n");
         return 10;
     }
+
+    AmiTLS13Base = OpenLibrary((STRPTR)AMITLS13NAME, AMITLS13VERSION);
+    if(!AmiTLS13Base){ out("OpenLibrary amitls13.library failed\n"); return 20; }
+
     if(logfile && logfile[0]){
         g_tool_output = Open((STRPTR)logfile, MODE_NEWFILE);
-        if(!g_tool_output){
-            g_tool_output = 0;
-            out("Log open failed\n");
-            return 15;
-        }
+        if(!g_tool_output){ out("Log open failed\n"); CloseLibrary(AmiTLS13Base); return 15; }
         AmiTLS13_SetDebugOutput(g_tool_output);
     }
 
@@ -51,28 +53,25 @@ int main(int argc, char **argv)
     outfile = (argi + 1 < argc) ? argv[argi + 1] : "RAM:amitls13_get.out";
 
     rc = AmiTLS13_Init();
-    if(rc != AMITLS13_OK){ out("Socket init failed: "); out_num(rc); out("\n"); return 20; }
+    if(rc != AMITLS13_OK){ out("Socket init failed: "); out_num(rc); out("\n"); CloseLibrary(AmiTLS13Base); return 25; }
 
-    out("AmiTLS13 GET: "); out(url); out("\n");
+    out("AmiTLS13 library GET: "); out(url); out("\n");
     rc = AmiTLS13_HTTPGet(url, outfile, AMITLS13F_INSECURE);
 
-    if(rc == AMITLS13_ERR_TLS_DISABLED){
-        out("TLS setup failed. Check TLS debug line above.\n");
-        return 30;
-    }
     if(rc < 0){
-        out("GET failed: "); out_num(rc); out(" Socket Errno: "); out_num(amitls13_socket_errno()); out("\n");
-        out("AmiTLS13 Exit begin\n"); AmiTLS13_Exit(); out("AmiTLS13 Exit done\n");
-        out("Program end failure\n");
+        out("GET failed: "); out_num(rc); out(" Socket Errno: "); out_num(AmiTLS13_SocketErrno()); out("\n");
+        AmiTLS13_Exit();
         if(g_tool_output){ AmiTLS13_SetDebugOutput(0); Close(g_tool_output); g_tool_output=0; }
+        CloseLibrary(AmiTLS13Base);
         Exit(40);
         return 40;
     }
 
     out("Received bytes: "); out_num(rc); out("\nSaved to: "); out(outfile); out("\n");
-    out("AmiTLS13 Exit begin\n"); AmiTLS13_Exit(); out("AmiTLS13 Exit done\n");
-    out("Program end ok\n");
+    AmiTLS13_Exit();
     if(g_tool_output){ AmiTLS13_SetDebugOutput(0); Close(g_tool_output); g_tool_output=0; }
+    CloseLibrary(AmiTLS13Base);
+    out("Program end ok\n");
     Exit(0);
     return 0;
 }

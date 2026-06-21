@@ -1,83 +1,133 @@
-# AmiTLS13 Proof-of-Concept Plan
+# AmiTLS13 Implementation Plan
 
 ## Objective
 
 Build a compact AmigaOS 1.3 TLS/HTTPS wrapper library named `amitls13.library`. It should let new OS1.3 programs use HTTPS without depending on AmiSSL v5/v6, OpenSSL 3.x/4.x, clib2, or AmigaOS 3 APIs.
 
-## Scope
+AmiTLS13 is not a full AmiSSL replacement. It exposes a small stable client API for HTTPS and TLS streams.
 
-AmiTLS13 is not intended to be a full AmiSSL replacement. It will expose a small stable client API for HTTPS and TLS streams.
+## Fixed Direction
+
+- Functionality over API breadth.
+- OS1.3 compatibility first.
+- 68020+ target for TLS builds.
+- Use `bsdsocket.library` for network access.
+- Use BearSSL as TLS backend.
+- Keep stack requirements explicit: minimum 65000 bytes, recommended 131072 bytes.
 
 ## Phase 1: Static HTTPS Proof of Concept
 
-1. Import BearSSL source into `third_party/bearssl/`.
-2. Build only the needed BearSSL client pieces. Current PoC still builds a broad BearSSL subset; object pruning is a follow-up.
-3. Implement a bsdsocket-backed transport adapter.
-4. Implement minimal URL parsing for `https://host[:port]/path`.
-5. Build `tools/amitls13_get` as a static test program.
-6. First test mode uses BearSSLs full client profile with an insecure X.509 acceptor to validate handshake and data flow.
-7. Then enable CA/hostname verification.
+Status: working PoC.
 
-Expected test:
+Completed:
+
+1. BearSSL source imported under `third_party/bearssl/`.
+2. Static `libamitls13.a` build works with bebbo/amiga-gcc and `-mcrt=nix13`.
+3. `tools/amitls13_get` exists as reference test program.
+4. HTTP and HTTPS URL parsing implemented for the PoC scope.
+5. `bsdsocket.library` transport adapter implemented.
+6. bsdsocket calls routed through 68k assembly stubs to preserve registers around library calls.
+7. Insecure X.509 acceptor implemented for first transport validation.
+8. `https://example.com` can be fetched on the Amiga test system with sufficient stack.
+9. Request and receive buffers in `AmiTLS13_HTTPGet()` are allocated with `AllocMem()` to reduce stack pressure.
+10. Trace and debug builds are optional through `make TRACE=1` and `make TRACE=1 DEBUG=1`.
+
+Reference test:
 
 ```text
-amitls13_get https://example.com/
+stack 131072
+amitls13_get https://example.com
 ```
 
-Expected output milestones:
+Expected result:
 
-- DNS ok
-- TCP connected
-- TLS handshake ok
-- HTTP status received
-- bytes received
+- TCP connect succeeds.
+- TLS handshake succeeds.
+- HTTP response is received.
+- Output file is written.
+- Program exits without crash when started with sufficient stack.
 
 ## Phase 2: Public Wrapper API
 
-Initial API draft:
+Status: initial API exists and builds both statically and through `amitls13.library` vectors.
+
+Initial API:
 
 ```c
 struct AmiTLS13Context;
 
 LONG AmiTLS13_Init(void);
 void AmiTLS13_Exit(void);
+void AmiTLS13_SetDebugOutput(BPTR fh);
 
 struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG flags);
 LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len);
 LONG AmiTLS13_Read(struct AmiTLS13Context *ctx, UBYTE *buf, ULONG maxlen);
 void AmiTLS13_Close(struct AmiTLS13Context *ctx);
 LONG AmiTLS13_GetLastError(struct AmiTLS13Context *ctx);
+LONG AmiTLS13_SocketErrno(void);
 
 LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags);
 ```
 
+Required cleanup before declaring the API stable:
+
+- Per-context TLS callback state is implemented.
+- `AmiTLS13_Init()`/`AmiTLS13_Exit()` now reference-count the shared `bsdsocket.library` handle.
+- Stable public error codes are defined in `include/amitls13.h`.
+- Caller lifecycle rules are documented in `sdk/README.md` and `README.md`.
+
 ## Phase 3: `amitls13.library`
 
-Convert the proven static implementation into a classic Amiga shared library:
+Status: initial library file builds and has passed the first Amiga-side HTTPS smoke test.
 
-- library file: `amitls13.library`
-- install target: `LIBS:`
-- no OS2+/OS3-only APIs
-- use `AllocMem`/`FreeMem`, not `AllocVec`
-- no `ReadArgs`
-- no `CreateNewProc`
-- per-connection contexts
-- usable by multiple applications
+Completed:
+
+1. `build/amitls13.library` is generated.
+2. Classic Resident/AutoInit structure added.
+3. Library metadata is set during init: name, version, revision and id string.
+4. Library jump table contains standard vectors plus AmiTLS13 API vectors.
+5. Assembly entry stubs translate Amiga register arguments to C stack arguments.
+6. `tools/amitls13_get_lib` opens `amitls13.library` through `OpenLibrary()` and calls the API through client stubs.
+7. `dos.library` is opened during library init so TLS/HTTP file and entropy paths have a valid DOSBase.
+8. `tools/amitls13_openclose` provides repeated library open/close testing without network access.
+9. `tools/amitls13_repeat_get_lib` validates repeated HTTPS calls through the shared library.
+10. `sdk/` contains public headers, client stubs and a minimal consumer example.
+
+Reference library test:
+
+```text
+copy amitls13.library LIBS:
+stack 131072
+amitls13_get_lib https://example.com
+```
+
+Next Phase 3 checks:
+
+- Verify `version LIBS:amitls13.library` on OS1.3.
+- Run `amitls13_example_get https://example.com` to validate the exported SDK example.
+- Confirm no crash after `CloseLibrary()` and DOS `Exit()`.
 
 ## Phase 4: Certificates
 
-Add CA handling:
+Add certificate handling after transport stability:
 
-- `AmiTLS13:certs/`
-- optionally `PROGDIR:certs/` fallback for local application bundles
-- verification flags:
-  - `AMITLS13F_INSECURE`
-  - `AMITLS13F_VERIFY_CERT`
-  - `AMITLS13F_VERIFY_HOSTNAME`
+- Keep `AMITLS13F_INSECURE` for development and retro systems.
+- Add optional certificate pinning first, because it is small and deterministic.
+- Add CA bundle support later if memory and file handling remain acceptable.
+- Candidate locations:
+  - `AmiTLS13:certs/`
+  - `PROGDIR:certs/`
+
+Verification flags:
+
+- `AMITLS13F_INSECURE`
+- `AMITLS13F_VERIFY_CERT`
+- `AMITLS13F_VERIFY_HOSTNAME`
 
 ## Phase 5: Integration Targets
 
-After the command-line PoC works:
+After the command-line and library PoCs are repeatably stable:
 
 1. Weather13 HTTPS access
 2. ISSTracker HTTPS fallback APIs

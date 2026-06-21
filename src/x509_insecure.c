@@ -2,11 +2,12 @@
 #include <proto/dos.h>
 #include <string.h>
 #include "x509_insecure.h"
+#include "amitls13.h"
 
 static void xdbg(const char *s)
 {
 #ifdef AMITLS13_DEBUG
-    if(s) Write(Output(), (APTR)s, strlen(s));
+    if(s) AmiTLS13_DebugWrite(s);
 #else
     (void)s;
 #endif
