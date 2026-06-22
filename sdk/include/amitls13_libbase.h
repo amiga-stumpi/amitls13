@@ -5,7 +5,7 @@
 #include <exec/libraries.h>
 
 #define AMITLS13NAME "amitls13.library"
-#define AMITLS13VERSION 0
+#define AMITLS13VERSION 1
 
 extern struct Library *AmiTLS13Base;
 

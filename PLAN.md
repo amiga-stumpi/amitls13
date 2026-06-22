@@ -110,6 +110,17 @@ Next Phase 3 checks:
 
 ## Phase 4: Certificates
 
+Status: public-key pinning implemented and builds. Amiga-side validation is next.
+
+Implemented:
+
+1. `AMITLS13F_PIN_PUBKEY_SHA256` request flag.
+2. `AmiTLS13_SetPublicKeyPinSHA256(pin, 32)` to set a process-global pin.
+3. `AmiTLS13_SetPublicKeyPinSHA256(0, 0)` to clear the pin.
+4. `AmiTLS13_GetLastPeerPublicKeySHA256(out, 32)` to retrieve the last successful TLS peer key hash.
+5. `amitls13_pin_print_lib` to print the endpoint hash on the Amiga.
+6. `amitls13_pin_fail_lib` to verify that a deliberately wrong pin is rejected.
+
 Add certificate handling after transport stability:
 
 - Keep `AMITLS13F_INSECURE` for development and retro systems.
@@ -124,6 +135,15 @@ Verification flags:
 - `AMITLS13F_INSECURE`
 - `AMITLS13F_VERIFY_CERT`
 - `AMITLS13F_VERIFY_HOSTNAME`
+
+Reference pinning tests:
+
+```text
+copy amitls13.library LIBS:
+stack 131072
+amitls13_pin_print_lib https://example.com
+amitls13_pin_fail_lib https://example.com
+```
 
 ## Phase 5: Integration Targets
 

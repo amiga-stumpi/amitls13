@@ -6,11 +6,11 @@ The goal is not to port the full AmiSSL/OpenSSL API. AmiTLS13 provides a small c
 
 ## Current Status
 
-Phase 1 is a working BearSSL-backed HTTPS proof of concept. The static reference tool `amitls13_get` can fetch `https://example.com` on the Amiga test system with a sufficiently large stack.
+AmiTLS13 now builds as a compact classic Amiga shared library named `amitls13.library`, plus static and OpenLibrary-based test tools. The current optimized release baseline has passed the Amiga-side smoke tests with `stack 65000`.
 
-Phase 2/3 are now at an initial library-validation stage: the same implementation builds as a classic Amiga shared library file named `amitls13.library`. `amitls13_get_lib` opens `amitls13.library` with `OpenLibrary()` and calls the API through library-vector stubs instead of linking the TLS implementation directly.
+The current TLS profile is intentionally small: TLS 1.2 client mode with `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`, P-256 ECDHE and SHA-256 PRF/hash support. CBC, static RSA key exchange, SHA384, P-384, P-521, Curve25519, ChaCha20, CCM, DES and server-side TLS code are not linked into the release build. This keeps the library small and focused on the HTTPS endpoints currently targeted by OS1.3 applications.
 
-The current TLS mode is intentionally insecure: it accepts the server certificate chain without CA or hostname validation. This validates transport, TLS handshake, encrypted I/O and HTTP data flow first. Certificate verification and hostname validation are later phases.
+The current certificate mode is intentionally insecure by default: it accepts the server certificate chain without CA or hostname validation. Public-key pinning is available as a deterministic interim protection for known HTTPS endpoints. Full CA/hostname validation is a later phase.
 
 ## Requirements
 
@@ -22,11 +22,11 @@ The current TLS mode is intentionally insecure: it accepts the server certificat
 Recommended stack:
 
 ```text
-minimum:     65000 bytes
-recommended: 131072 bytes
+minimum validated: 65000 bytes
+recommended:      131072 bytes
 ```
 
-TLS/BearSSL uses deep call chains during handshake, X.509 parsing and RSA verification. Large persistent buffers are allocated with `AllocMem()`, but stack size still matters.
+TLS/BearSSL still uses deep call chains during handshake, X.509 parsing and RSA verification. Large persistent buffers and the HTTP/TLS transient buffers are allocated with `AllocMem()`, and the optimized release profile has passed the current smoke tests at `stack 65000`, but applications that do additional work around TLS should still prefer a larger stack.
 
 ## Build
 
@@ -47,6 +47,8 @@ build/amitls13_get_lib    OpenLibrary-based HTTPS reference tool
 build/amitls13_openclose  repeated OpenLibrary/CloseLibrary test tool
 build/amitls13_repeat_get_lib repeated HTTPS test through amitls13.library
 build/amitls13_example_get    SDK example using only sdk/ files
+build/amitls13_pin_print_lib  prints the leaf public-key material SHA256 hash
+build/amitls13_pin_fail_lib   negative test: rejects a deliberately wrong pin
 ```
 
 Trace build for Amiga-side diagnosis:
@@ -89,10 +91,10 @@ Install the library file first:
 copy amitls13.library LIBS:
 ```
 
-Then run the OpenLibrary-based test tool with a large stack:
+Then run the OpenLibrary-based test tool with a suitable stack:
 
 ```text
-stack 131072
+stack 65000
 amitls13_get_lib https://example.com
 ```
 
@@ -120,12 +122,43 @@ AmiTLS13 open/close test: 50 cycles
 Open/close test ok
 ```
 
+## Public-Key Pinning Test
+
+After installing `amitls13.library`, obtain the current leaf public-key material hash for an endpoint:
+
+```text
+stack 65000
+amitls13_pin_print_lib https://example.com
+```
+
+Expected result includes a 64-character hex value:
+
+```text
+Peer public key material SHA256: ...
+Program end ok
+```
+
+A negative test is also built. It installs an all-zero pin and expects the TLS handshake to fail:
+
+```text
+stack 131072
+amitls13_pin_fail_lib https://example.com
+```
+
+Expected result:
+
+```text
+Pin mismatch rejected as expected: -7
+```
+
+This first pinning mode hashes the BearSSL-decoded leaf public key material, not the DER SPKI wrapper used by OpenSSL `pin-sha256` examples. Use `amitls13_pin_print_lib` to derive the value to store in OS1.3 programs.
+
 ## Repeat HTTPS Test
 
 After the basic library test succeeds, run repeated HTTPS calls through the shared library:
 
 ```text
-stack 131072
+stack 65000
 amitls13_repeat_get_lib https://example.com 3
 ```
 
@@ -157,6 +190,8 @@ void AmiTLS13_Close(struct AmiTLS13Context *ctx);
 LONG AmiTLS13_GetLastError(struct AmiTLS13Context *ctx);
 LONG AmiTLS13_SocketErrno(void);
 
+LONG AmiTLS13_SetPublicKeyPinSHA256(const UBYTE *sha256, ULONG len);
+LONG AmiTLS13_GetLastPeerPublicKeySHA256(UBYTE *out_sha256, ULONG len);
 LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags);
 ```
 
@@ -191,11 +226,17 @@ Lifecycle rules for applications:
 - `amitls13.library` uses a classic Resident/AutoInit structure and a negative-offset function table.
 - Library entry stubs translate Amiga register arguments into normal C stack arguments.
 - Client stubs in `sdk/amitls13_client_stubs.S` let consumer programs call the library vectors from C.
-- `AmiTLS13_HTTPGet()` allocates request and receive buffers with `AllocMem()` to reduce application stack pressure.
-- TLS socket callbacks use BearSSL opaque pointers and keep callback state per `AmiTLS13Context`.
+- The connection context owns the BearSSL client engine, X.509 state and TLS I/O buffer and is allocated with `AllocMem()`.
+- `AmiTLS13_HTTPGet()` keeps the stable high-level HTTP path with small `AllocMem()` request and receive buffers. The current validated receive buffer is 1024 bytes.
+- `AmiTLS13_HTTPGet()` writes the full HTTP/1.0 response to the output file. Full status/header parsing is intentionally left to caller applications for now.
+- Allocation defaults use `MEMF_PUBLIC` for OS1.3 compatibility. Builds may override `AMITLS13_MEM_FLAGS` and `AMITLS13_MEM_CLEAR_FLAGS` if a target system should prefer a specific memory class, but the default does not require Fast RAM.
+- TLS socket callbacks use BearSSL opaque pointers and keep callback state per `AmiTLS13Context`. The current default socket wait quantum is 50 ms with a 200-try budget, giving faster wake-up than the earlier 250 ms loop while keeping a conservative total wait window.
 - `AmiTLS13_Init()`/`AmiTLS13_Exit()` reference-count the shared `bsdsocket.library` handle so multiple library users do not close it out from under each other.
+- `AmiTLS13_SetPublicKeyPinSHA256(pin, 32)` stores a process-global pin. Passing `0, 0` clears it. The pin is enforced when `AMITLS13F_PIN_PUBKEY_SHA256` is used on a TLS request.
+- `AmiTLS13_GetLastPeerPublicKeySHA256(out, 32)` returns the leaf public-key material hash from the last successful TLS `AmiTLS13_HTTPGet()`.
 
 ## Next Milestones
 
-1. Add certificate handling, initially with insecure mode plus optional pinning or a small CA bundle.
-2. Integrate HTTPS into Weather13, ISSTracker, AMusicBrainz or MajaRadio as first real consumers.
+1. Test the optimized library in real consumers such as ISSTracker and Weather13.
+2. Add CA bundle support if memory and file handling remain acceptable.
+3. Add optional compatibility profiles only when a target HTTPS endpoint needs another TLS suite or curve.

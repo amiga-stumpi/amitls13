@@ -34,8 +34,27 @@ static void xdbg_num(LONG n)
 static void ix_clear_pkey(AmiTLS13InsecureX509Context *xc)
 {
     xc->have_pkey=0;
+    xc->key_data_len=0;
     memset(&xc->pkey,0,sizeof(xc->pkey));
     memset(xc->key_data,0,sizeof(xc->key_data));
+    memset(xc->leaf_key_sha256,0,sizeof(xc->leaf_key_sha256));
+}
+
+static UBYTE ix_eq32(const UBYTE *a, const UBYTE *b)
+{
+    UBYTE v = 0;
+    UWORD i;
+    for(i=0;i<32;i++) v |= (UBYTE)(a[i] ^ b[i]);
+    return v == 0;
+}
+
+static void ix_hash_leaf_key(AmiTLS13InsecureX509Context *xc)
+{
+    br_sha256_context sh;
+    memset(xc->leaf_key_sha256,0,sizeof(xc->leaf_key_sha256));
+    br_sha256_init(&sh);
+    br_sha256_update(&sh, xc->key_data, xc->key_data_len);
+    br_sha256_out(&sh, xc->leaf_key_sha256);
 }
 
 static UBYTE ix_copy_pkey(AmiTLS13InsecureX509Context *xc, const br_x509_pkey *pk)
@@ -57,6 +76,7 @@ static UBYTE ix_copy_pkey(AmiTLS13InsecureX509Context *xc, const br_x509_pkey *p
         xc->pkey.key.rsa.nlen=nlen;
         xc->pkey.key.rsa.e=xc->key_data+nlen;
         xc->pkey.key.rsa.elen=elen;
+        xc->key_data_len=nlen+elen;
         xc->have_pkey=1;
         return 1;
     }
@@ -67,6 +87,7 @@ static UBYTE ix_copy_pkey(AmiTLS13InsecureX509Context *xc, const br_x509_pkey *p
         xc->pkey.key.ec.curve=pk->key.ec.curve;
         xc->pkey.key.ec.q=xc->key_data;
         xc->pkey.key.ec.qlen=qlen;
+        xc->key_data_len=qlen;
         xc->have_pkey=1;
         return 1;
     }
@@ -112,7 +133,15 @@ static void ix_end_cert(const br_x509_class **ctx)
     if(xc->cert_index==0){
         const br_x509_pkey *pk;
         pk=br_x509_decoder_get_pkey(&xc->decoder);
-        if(!ix_copy_pkey(xc, pk)) xc->failed=1;
+        if(!ix_copy_pkey(xc, pk)){
+            xc->failed=1;
+        } else {
+            ix_hash_leaf_key(xc);
+            if(xc->pin_enabled && !ix_eq32(xc->leaf_key_sha256, xc->pin_sha256)){
+                xdbg("X509 public key pin mismatch\n");
+                xc->failed=1;
+            }
+        }
         xdbg("X509 pkey copied="); xdbg_num((LONG)xc->have_pkey); xdbg(" type="); xdbg_num((LONG)xc->pkey.key_type); xdbg("\n");
     }
     xc->cert_index++;
@@ -149,4 +178,16 @@ void amitls13_x509_insecure_init(AmiTLS13InsecureX509Context *ctx)
 {
     memset(ctx,0,sizeof(*ctx));
     ctx->vtable=&ix_vtable;
+}
+
+void amitls13_x509_set_pubkey_pin_sha256(AmiTLS13InsecureX509Context *ctx, const UBYTE *sha256)
+{
+    if(!ctx) return;
+    if(!sha256){
+        ctx->pin_enabled=0;
+        memset(ctx->pin_sha256,0,sizeof(ctx->pin_sha256));
+        return;
+    }
+    memcpy(ctx->pin_sha256, sha256, 32);
+    ctx->pin_enabled=1;
 }

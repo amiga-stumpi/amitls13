@@ -24,19 +24,53 @@ LIBTOOLOBJS = $(BUILD)/amitls13_get_lib.o $(BUILD)/amitls13_client_stubs.o
 OPENCLOSEOBJS = $(BUILD)/amitls13_openclose.o
 REPEATTOOLOBJS = $(BUILD)/amitls13_repeat_get_lib.o $(BUILD)/amitls13_client_stubs.o
 SDKEXAMPLEOBJS = $(BUILD)/amitls13_example_get.o $(BUILD)/sdk_amitls13_client_stubs.o
+PINFAILTOOLOBJS = $(BUILD)/amitls13_pin_fail_lib.o $(BUILD)/amitls13_client_stubs.o
+PINPRINTTOOLOBJS = $(BUILD)/amitls13_pin_print_lib.o $(BUILD)/amitls13_client_stubs.o
 
-BRSRCS = $(shell find third_party/bearssl/src -name '*.c' \
-	! -path '*/ssl/ssl_server*' \
-	! -path '*/symcipher/*x86ni*' \
-	! -path '*/symcipher/*sse2*' \
-	! -path '*/symcipher/*pwr8*' \
-	! -path '*/rand/sysrng.c' \
-	! -path '*/int/i62_*')
+BRSRCS = \
+	third_party/bearssl/src/mac/hmac.c \
+	third_party/bearssl/src/int/i15_montmul.c \
+	third_party/bearssl/src/int/i15_iszero.c \
+	third_party/bearssl/src/int/i15_modpow2.c \
+	third_party/bearssl/src/int/i15_tmont.c \
+	third_party/bearssl/src/int/i15_ninv15.c \
+	third_party/bearssl/src/int/i15_add.c \
+	third_party/bearssl/src/int/i15_sub.c \
+	third_party/bearssl/src/int/i15_fmont.c \
+	third_party/bearssl/src/int/i15_modpow.c \
+	third_party/bearssl/src/int/i15_decmod.c \
+	third_party/bearssl/src/int/i15_muladd.c \
+	third_party/bearssl/src/int/i15_encode.c \
+	third_party/bearssl/src/int/i15_decode.c \
+	third_party/bearssl/src/int/i15_bitlen.c \
+	third_party/bearssl/src/ssl/ssl_rec_gcm.c \
+	third_party/bearssl/src/ssl/ssl_engine.c \
+	third_party/bearssl/src/ssl/ssl_client.c \
+	third_party/bearssl/src/ssl/ssl_hs_client.c \
+	third_party/bearssl/src/ssl/prf_sha256.c \
+	third_party/bearssl/src/ssl/ssl_io.c \
+	third_party/bearssl/src/ssl/prf.c \
+	third_party/bearssl/src/symcipher/aes_ct_ctr.c \
+	third_party/bearssl/src/symcipher/aes_ct_enc.c \
+	third_party/bearssl/src/symcipher/aes_ct.c \
+	third_party/bearssl/src/codec/ccopy.c \
+	third_party/bearssl/src/codec/dec32be.c \
+	third_party/bearssl/src/codec/enc32be.c \
+	third_party/bearssl/src/rand/hmac_drbg.c \
+	third_party/bearssl/src/rsa/rsa_i15_pub.c \
+	third_party/bearssl/src/rsa/rsa_i15_pkcs1_vrfy.c \
+	third_party/bearssl/src/rsa/rsa_pkcs1_sig_unpad.c \
+	third_party/bearssl/src/x509/x509_decoder.c \
+	third_party/bearssl/src/ec/ec_p256_m15.c \
+	third_party/bearssl/src/hash/ghash_ctmul32.c \
+	third_party/bearssl/src/hash/sha2small.c \
+	third_party/bearssl/src/hash/multihash.c \
+	third_party/bearssl/src/hash/sha1.c
 BROBJS = $(patsubst third_party/bearssl/src/%.c,$(BUILD)/bearssl/%.o,$(BRSRCS))
 
 .PHONY: all clean trace debug
 
-all: $(BUILD)/libamitls13.a $(BUILD)/amitls13.library $(BUILD)/amitls13_get $(BUILD)/amitls13_get_lib $(BUILD)/amitls13_openclose $(BUILD)/amitls13_repeat_get_lib $(BUILD)/amitls13_example_get
+all: $(BUILD)/libamitls13.a $(BUILD)/amitls13.library $(BUILD)/amitls13_get $(BUILD)/amitls13_get_lib $(BUILD)/amitls13_openclose $(BUILD)/amitls13_repeat_get_lib $(BUILD)/amitls13_example_get $(BUILD)/amitls13_pin_fail_lib $(BUILD)/amitls13_pin_print_lib
 
 trace:
 	$(MAKE) clean
@@ -71,6 +105,12 @@ $(BUILD)/amitls13_openclose.o: tools/amitls13_openclose.c | $(BUILD)
 $(BUILD)/amitls13_repeat_get_lib.o: tools/amitls13_repeat_get_lib.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/amitls13_pin_fail_lib.o: tools/amitls13_pin_fail_lib.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD)/amitls13_pin_print_lib.o: tools/amitls13_pin_print_lib.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/amitls13_example_get.o: sdk/examples/amitls13_example_get.c | $(BUILD)
 	$(CC) $(SDKCFLAGS) -c $< -o $@
 
@@ -98,6 +138,12 @@ $(BUILD)/amitls13_repeat_get_lib: $(REPEATTOOLOBJS)
 
 $(BUILD)/amitls13_example_get: $(SDKEXAMPLEOBJS)
 	$(CC) $(LDFLAGS) $(SDKEXAMPLEOBJS) -o $@
+
+$(BUILD)/amitls13_pin_fail_lib: $(PINFAILTOOLOBJS)
+	$(CC) $(LDFLAGS) $(PINFAILTOOLOBJS) -o $@
+
+$(BUILD)/amitls13_pin_print_lib: $(PINPRINTTOOLOBJS)
+	$(CC) $(LDFLAGS) $(PINPRINTTOOLOBJS) -o $@
 
 clean:
 	rm -rf $(BUILD)

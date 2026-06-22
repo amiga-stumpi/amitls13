@@ -15,8 +15,33 @@
 #ifndef AMITLS13_TLS_SEND_CHUNK
 #define AMITLS13_TLS_SEND_CHUNK 512UL
 #endif
+#ifndef AMITLS13_TLS_WAIT_US
+#define AMITLS13_TLS_WAIT_US 50000UL
+#endif
+#ifndef AMITLS13_TLS_IO_TRIES
+#define AMITLS13_TLS_IO_TRIES 200
+#endif
+#ifndef AMITLS13_HTTP_REQ_BUF
+#define AMITLS13_HTTP_REQ_BUF 512UL
+#endif
+#ifndef AMITLS13_HTTP_RECV_BUF
+#define AMITLS13_HTTP_RECV_BUF 2048UL
+#endif
+#ifndef AMITLS13_HOST_COPY_BUF
+#define AMITLS13_HOST_COPY_BUF 256UL
+#endif
+#ifndef AMITLS13_MEM_FLAGS
+#define AMITLS13_MEM_FLAGS MEMF_PUBLIC
+#endif
+#ifndef AMITLS13_MEM_CLEAR_FLAGS
+#define AMITLS13_MEM_CLEAR_FLAGS (MEMF_PUBLIC|MEMF_CLEAR)
+#endif
 
 static BPTR g_debug_output = 0;
+static UBYTE g_pubkey_pin_sha256[32];
+static UBYTE g_pubkey_pin_enabled = 0;
+static UBYTE g_last_peer_pubkey_sha256[32];
+static UBYTE g_last_peer_pubkey_valid = 0;
 
 void AmiTLS13_SetDebugOutput(BPTR fh)
 {
@@ -35,6 +60,27 @@ void AmiTLS13_DebugWrite(const char *s)
 #endif
 }
 
+LONG AmiTLS13_SetPublicKeyPinSHA256(const UBYTE *sha256, ULONG len)
+{
+    if(!sha256 || len == 0){
+        memset(g_pubkey_pin_sha256, 0, sizeof(g_pubkey_pin_sha256));
+        g_pubkey_pin_enabled = 0;
+        return AMITLS13_OK;
+    }
+    if(len != 32) return AMITLS13_ERR_CERT_PIN;
+    memcpy(g_pubkey_pin_sha256, sha256, 32);
+    g_pubkey_pin_enabled = 1;
+    return AMITLS13_OK;
+}
+
+LONG AmiTLS13_GetLastPeerPublicKeySHA256(UBYTE *out_sha256, ULONG len)
+{
+    if(!out_sha256 || len < 32 || !g_last_peer_pubkey_valid) return AMITLS13_ERR_CERT_PIN;
+    memcpy(out_sha256, g_last_peer_pubkey_sha256, 32);
+    return AMITLS13_OK;
+}
+
+#ifdef AMITLS13_DEBUG
 static void dbg(const char *s)
 {
     AmiTLS13_DebugWrite(s);
@@ -42,7 +88,6 @@ static void dbg(const char *s)
 
 static void dbg_num(LONG n)
 {
-#ifdef AMITLS13_DEBUG
     char b[16];
     char t[14];
     WORD i=0;
@@ -52,30 +97,20 @@ static void dbg_num(LONG n)
     while(i>0) b[p++]=t[--i];
     b[p]=0;
     dbg(b);
-#else
-    (void)n;
-#endif
 }
 
-#ifdef AMITLS13_DEBUG
 static void dbg_hex_byte(UBYTE v)
 {
-#ifdef AMITLS13_DEBUG
     static const char hx[] = "0123456789ABCDEF";
     char b[3];
     b[0] = hx[(v >> 4) & 15];
     b[1] = hx[v & 15];
     b[2] = 0;
     dbg(b);
-#else
-    (void)v;
-#endif
 }
-#endif
 
 static void dbg_dump_bytes(const char *prefix, const UBYTE *buf, ULONG len)
 {
-#ifdef AMITLS13_DEBUG
     ULONG i, n;
     dbg(prefix);
     n = len;
@@ -85,14 +120,10 @@ static void dbg_dump_bytes(const char *prefix, const UBYTE *buf, ULONG len)
         dbg_hex_byte(buf[i]);
     }
     dbg("\n");
-#else
-    (void)prefix; (void)buf; (void)len;
-#endif
 }
 
 static void dbg_brerr(LONG e)
 {
-#ifdef AMITLS13_DEBUG
     dbg_num(e);
     if(e >= BR_ERR_RECV_FATAL_ALERT && e < BR_ERR_SEND_FATAL_ALERT){
         dbg(" recv_alert=");
@@ -101,19 +132,22 @@ static void dbg_brerr(LONG e)
         dbg(" send_alert=");
         dbg_num(e - BR_ERR_SEND_FATAL_ALERT);
     }
-#else
-    (void)e;
-#endif
 }
+#else
+#define dbg(s) ((void)0)
+#define dbg_num(n) ((void)0)
+#define dbg_dump_bytes(prefix, buf, len) ((void)0)
+#define dbg_brerr(e) ((void)0)
+#endif
 
+#ifdef AMITLS13_TRACE
 static void trace(const char *s)
 {
-#ifdef AMITLS13_TRACE
     if(s) Write(Output(), (APTR)s, strlen(s));
-#else
-    (void)s;
-#endif
 }
+#else
+#define trace(s) ((void)0)
+#endif
 
 static void fill_entropy(ULONG *seed)
 {
@@ -144,7 +178,6 @@ struct AmiTLS13Context {
     UBYTE tls_broken;
     UBYTE suppress_alert_writes;
     br_ssl_client_context sc;
-    br_x509_minimal_context xc;
     br_sslio_context ioc;
     AmiTLS13InsecureX509Context ix;
     UBYTE iobuf[BR_SSL_BUFSIZE_BIDI];
@@ -164,7 +197,7 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
     if(fd < 0) return -1;
     {
         UWORD tries;
-        for(tries=0; tries<80; tries++){
+        for(tries=0; tries<AMITLS13_TLS_IO_TRIES; tries++){
             r=amitls13_tcp_recv(fd, buf, (ULONG)len);
             if(r>0) return (int)r;
             if(r<0) break;
@@ -172,7 +205,7 @@ static int tls_sock_read(void *opaque, unsigned char *buf, size_t len)
             {
                 LONG wr;
                 dbg("TLS cb read empty wait\n");
-                wr = amitls13_tcp_wait_read(fd, 250000UL);
+                wr = amitls13_tcp_wait_read(fd, AMITLS13_TLS_WAIT_US);
                 dbg("TLS cb wait ret="); dbg_num(wr); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
                 if(wr < 0) break;
             }
@@ -207,14 +240,14 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
     while(done<len){
         UWORD tries;
         r=0;
-        for(tries=0; tries<80; tries++){
+        for(tries=0; tries<AMITLS13_TLS_IO_TRIES; tries++){
             chunk = (ULONG)(len - done);
             if(chunk > AMITLS13_TLS_SEND_CHUNK) chunk = AMITLS13_TLS_SEND_CHUNK;
             dbg("TLS cb send begin fd="); dbg_num(fd); dbg(" done="); dbg_num((LONG)done); dbg(" chunk="); dbg_num((LONG)chunk); dbg("\n");
             r=amitls13_tcp_send(fd, buf+done, chunk);
             if(r>0) break;
             dbg("TLS cb write wait done="); dbg_num((LONG)done); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
-            { LONG wr = amitls13_tcp_wait_write(fd, 250000UL);
+            { LONG wr = amitls13_tcp_wait_write(fd, AMITLS13_TLS_WAIT_US);
               dbg("TLS cb write wait ret="); dbg_num(wr); dbg(" err="); dbg_num(amitls13_socket_errno()); dbg("\n");
               if(wr < 0) break; }
         }
@@ -232,12 +265,7 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
 static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
 {
     static const uint16_t suites[] = {
-        BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        BR_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256,
-        BR_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-        BR_TLS_RSA_WITH_AES_128_GCM_SHA256,
-        BR_TLS_RSA_WITH_AES_128_CBC_SHA256,
-        BR_TLS_RSA_WITH_AES_128_CBC_SHA
+        BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
     };
     ULONG seed[12];
     char host_copy[256];
@@ -254,14 +282,25 @@ static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
     if(host[hi]) return AMITLS13_ERR_URL;
 
     trace("TRACE tls init\n");
-    dbg("TLS init full\n");
-    br_ssl_client_init_full(&ctx->sc, &ctx->xc, 0, 0);
-    dbg("TLS RSA suites active\n");
+    dbg("TLS init minimal\n");
+    br_ssl_client_zero(&ctx->sc);
+    br_ssl_engine_set_versions(&ctx->sc.eng, BR_TLS12, BR_TLS12);
     br_ssl_engine_set_suites(&ctx->sc.eng, suites, sizeof(suites)/sizeof(suites[0]));
+    br_ssl_client_set_rsapub(&ctx->sc, br_rsa_i15_public);
+    br_ssl_engine_set_rsavrfy(&ctx->sc.eng, br_rsa_i15_pkcs1_vrfy);
+    br_ssl_engine_set_ec(&ctx->sc.eng, &br_ec_p256_m15);
+    br_ssl_engine_set_hash(&ctx->sc.eng, br_sha1_ID, &br_sha1_vtable);
+    br_ssl_engine_set_hash(&ctx->sc.eng, br_sha256_ID, &br_sha256_vtable);
+    br_ssl_engine_set_prf_sha256(&ctx->sc.eng, &br_tls12_sha256_prf);
+    br_ssl_engine_set_gcm(&ctx->sc.eng, &br_sslrec_in_gcm_vtable, &br_sslrec_out_gcm_vtable);
+    br_ssl_engine_set_aes_ctr(&ctx->sc.eng, &br_aes_ct_ctr_vtable);
+    br_ssl_engine_set_ghash(&ctx->sc.eng, &br_ghash_ctmul32);
 
     /* Phase 1 validates transport/TLS flow before CA and hostname checks. */
     dbg("TLS x509 insecure init\n");
     amitls13_x509_insecure_init(&ctx->ix);
+    if(g_pubkey_pin_enabled && (ctx->flags & AMITLS13F_PIN_PUBKEY_SHA256))
+        amitls13_x509_set_pubkey_pin_sha256(&ctx->ix, g_pubkey_pin_sha256);
     br_ssl_engine_set_x509(&ctx->sc.eng, &ctx->ix.vtable);
 
     trace("TRACE tls entropy\n");
@@ -310,7 +349,7 @@ struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG fla
     LONG rc;
 
     trace("TRACE connect alloc\n");
-    ctx=(struct AmiTLS13Context *)AllocMem(sizeof(*ctx), MEMF_PUBLIC|MEMF_CLEAR);
+    ctx=(struct AmiTLS13Context *)AllocMem(sizeof(*ctx), AMITLS13_MEM_CLEAR_FLAGS);
     if(!ctx) return 0;
     fd=-1;
     ctx->flags=flags;
@@ -341,14 +380,15 @@ LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len)
         trace("TRACE write_all ret\n");
         ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
         dbg("TLS write_all ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(ctx->last_error); dbg("\n");
-        if(r!=0 || ctx->last_error!=BR_ERR_OK){ ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        if(r!=0 || ctx->last_error!=BR_ERR_OK){ trace("TRACE write_all fail\n"); ctx->tls_broken=1; return AMITLS13_ERR_IO; }
         trace("TRACE flush call\n");
         dbg("TLS flush begin\n");
         r=br_sslio_flush(&ctx->ioc);
         trace("TRACE flush ret\n");
         ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng);
         dbg("TLS flush ret="); dbg_num((LONG)r); dbg(" brerr="); dbg_brerr(ctx->last_error); dbg("\n");
-        if(r!=0 || ctx->last_error!=BR_ERR_OK){ ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        if(r!=0 || ctx->last_error!=BR_ERR_OK){ trace("TRACE flush fail\n"); ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        trace("TRACE write ok\n");
         return (LONG)len;
     }
     return amitls13_tcp_send(ctx->fd, buf, len);
@@ -360,7 +400,7 @@ LONG AmiTLS13_Read(struct AmiTLS13Context *ctx, UBYTE *buf, ULONG maxlen)
     if(!ctx || ctx->fd<0) return AMITLS13_ERR_IO;
     if(ctx->tls_active){
         r=br_sslio_read(&ctx->ioc, buf, (size_t)maxlen);
-        if(r<0){ ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); ctx->tls_broken=1; return AMITLS13_ERR_IO; }
+        if(r<0){ trace("TRACE read fail\n"); ctx->last_error=br_ssl_engine_last_error(&ctx->sc.eng); ctx->tls_broken=1; return AMITLS13_ERR_IO; }
         return (LONG)r;
     }
     return amitls13_tcp_recv(ctx->fd, buf, maxlen);
@@ -415,12 +455,13 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
     req = 0;
     buf = 0;
     total = 0;
+    g_last_peer_pubkey_valid = 0;
 
     trace("TRACE httpget parse\n");
     if(amitls13_parse_url(url, &parsed)!=AMITLS13_OK) return AMITLS13_ERR_URL;
 
-    req = (char *)AllocMem(512, MEMF_PUBLIC|MEMF_CLEAR);
-    buf = (UBYTE *)AllocMem(1024, MEMF_PUBLIC);
+    req = (char *)AllocMem(512, AMITLS13_MEM_CLEAR_FLAGS);
+    buf = (UBYTE *)AllocMem(1024, AMITLS13_MEM_FLAGS);
     if(!req || !buf){
         rc = AMITLS13_ERR_IO;
         goto cleanup;
@@ -461,6 +502,10 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
         if(fh) Write(fh, buf, n);
     }
     trace("TRACE httpget read done\n");
+    if(ctx && ctx->tls_active && ctx->ix.have_pkey){
+        memcpy(g_last_peer_pubkey_sha256, ctx->ix.leaf_key_sha256, 32);
+        g_last_peer_pubkey_valid = 1;
+    }
     rc = total;
 
 cleanup:
@@ -474,3 +519,5 @@ cleanup:
     trace("TRACE httpget done\n");
     return rc;
 }
+
+

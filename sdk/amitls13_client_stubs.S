@@ -93,3 +93,23 @@ _AmiTLS13_HTTPGet:
     jsr -84(a6)
     move.l (sp)+,a6
     rts
+
+    .globl _AmiTLS13_SetPublicKeyPinSHA256
+_AmiTLS13_SetPublicKeyPinSHA256:
+    move.l a6,-(sp)
+    move.l 8(sp),a0
+    move.l 12(sp),d0
+    move.l _AmiTLS13Base,a6
+    jsr -90(a6)
+    move.l (sp)+,a6
+    rts
+
+    .globl _AmiTLS13_GetLastPeerPublicKeySHA256
+_AmiTLS13_GetLastPeerPublicKeySHA256:
+    move.l a6,-(sp)
+    move.l 8(sp),a0
+    move.l 12(sp),d0
+    move.l _AmiTLS13Base,a6
+    jsr -96(a6)
+    move.l (sp)+,a6
+    rts

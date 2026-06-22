@@ -9,6 +9,8 @@ include/amitls13.h              public API and error codes
 include/amitls13_libbase.h      library name/version and AmiTLS13Base declaration
 amitls13_client_stubs.S         C-callable library-vector stubs
 examples/amitls13_example_get.c minimal HTTPS GET example
+../tools/amitls13_pin_print_lib.c example for extracting a pin
+../tools/amitls13_pin_fail_lib.c negative pinning test
 ```
 
 ## Build Requirements
@@ -34,7 +36,15 @@ examples/amitls13_example_get.c minimal HTTPS GET example
 
 TLS transport works, but certificate verification is not implemented yet. Use `AMITLS13F_INSECURE` for the current proof-of-concept phase. This encrypts the connection but does not protect against man-in-the-middle attacks.
 
-Future flags are already reserved:
+Current pinning flag:
+
+```c
+AMITLS13F_PIN_PUBKEY_SHA256
+```
+
+Set a 32-byte pin with `AmiTLS13_SetPublicKeyPinSHA256(pin, 32)` and use `AMITLS13F_PIN_PUBKEY_SHA256` on the TLS call to enforce it. Clear the process-global pin with `AmiTLS13_SetPublicKeyPinSHA256(0, 0)`. The helper `AmiTLS13_GetLastPeerPublicKeySHA256(out, 32)` returns the hash learned from the last successful TLS `AmiTLS13_HTTPGet()`.
+
+Future verification flags are already reserved:
 
 ```c
 AMITLS13F_VERIFY_CERT
