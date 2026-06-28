@@ -262,7 +262,7 @@ static int tls_sock_write(void *opaque, const unsigned char *buf, size_t len)
     return (int)done;
 }
 
-static LONG tls_start(struct AmiTLS13Context *ctx, const char *host)
+LONG AmiTLS13_StartTLS(struct AmiTLS13Context *ctx, const char *host)
 {
     static const uint16_t suites[] = {
         BR_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
@@ -473,7 +473,7 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
 
     if(parsed.https){
         trace("TRACE httpget tls\n");
-        rc=tls_start(ctx, parsed.host);
+        rc=AmiTLS13_StartTLS(ctx, parsed.host);
         if(rc!=AMITLS13_OK) goto cleanup;
     }
 
