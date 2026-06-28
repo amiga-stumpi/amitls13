@@ -184,6 +184,7 @@ void AmiTLS13_Exit(void);
 void AmiTLS13_SetDebugOutput(BPTR fh);
 
 struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG flags);
+LONG AmiTLS13_StartTLS(struct AmiTLS13Context *ctx, const char *host);
 LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len);
 LONG AmiTLS13_Read(struct AmiTLS13Context *ctx, UBYTE *buf, ULONG maxlen);
 void AmiTLS13_Close(struct AmiTLS13Context *ctx);
@@ -227,6 +228,7 @@ Lifecycle rules for applications:
 - Library entry stubs translate Amiga register arguments into normal C stack arguments.
 - Client stubs in `sdk/amitls13_client_stubs.S` let consumer programs call the library vectors from C.
 - The connection context owns the BearSSL client engine, X.509 state and TLS I/O buffer and is allocated with `AllocMem()`.
+- `AmiTLS13_StartTLS(ctx, host)` upgrades a connected context to TLS, using `host` as the SNI/handshake hostname. Call it after `AmiTLS13_Connect()` and before the first `AmiTLS13_Write()`/`AmiTLS13_Read()`. The handshake itself completes lazily on the first read/write.
 - `AmiTLS13_HTTPGet()` keeps the stable high-level HTTP path with small `AllocMem()` request and receive buffers. The current validated receive buffer is 1024 bytes.
 - `AmiTLS13_HTTPGet()` writes the full HTTP/1.0 response to the output file. Full status/header parsing is intentionally left to caller applications for now.
 - Allocation defaults use `MEMF_PUBLIC` for OS1.3 compatibility. Builds may override `AMITLS13_MEM_FLAGS` and `AMITLS13_MEM_CLEAR_FLAGS` if a target system should prefer a specific memory class, but the default does not require Fast RAM.

@@ -157,3 +157,13 @@ _AmiTLS13Lib_VGetLastPeerPublicKeySHA256:
     addq.l #8,sp
     movem.l (sp)+,d2-d7/a2-a6
     rts
+
+    .globl _AmiTLS13Lib_VStartTLS
+_AmiTLS13Lib_VStartTLS:
+    movem.l d2-d7/a2-a6,-(sp)
+    move.l a1,-(sp)
+    move.l a0,-(sp)
+    jsr _AmiTLS13_StartTLS
+    addq.l #8,sp
+    movem.l (sp)+,d2-d7/a2-a6
+    rts

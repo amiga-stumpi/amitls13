@@ -38,6 +38,7 @@ APTR AmiTLS13Lib_VInitAPI(void);
 APTR AmiTLS13Lib_VExitAPI(void);
 APTR AmiTLS13Lib_VSetDebugOutput(void);
 APTR AmiTLS13Lib_VConnect(void);
+APTR AmiTLS13Lib_VStartTLS(void);
 APTR AmiTLS13Lib_VWrite(void);
 APTR AmiTLS13Lib_VRead(void);
 APTR AmiTLS13Lib_VCloseContext(void);
@@ -64,6 +65,7 @@ static APTR func_table[] = {
     (APTR)AmiTLS13Lib_VHTTPGet,
     (APTR)AmiTLS13Lib_VSetPublicKeyPinSHA256,
     (APTR)AmiTLS13Lib_VGetLastPeerPublicKeySHA256,
+    (APTR)AmiTLS13Lib_VStartTLS,
     (APTR)-1
 };
 

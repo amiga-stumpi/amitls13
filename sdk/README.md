@@ -25,7 +25,7 @@ examples/amitls13_example_get.c minimal HTTPS GET example
 
 1. Open the library with `OpenLibrary(AMITLS13NAME, AMITLS13VERSION)`.
 2. Call `AmiTLS13_Init()` before network/TLS operations.
-3. Use either the stream API (`AmiTLS13_Connect`, `AmiTLS13_Write`, `AmiTLS13_Read`, `AmiTLS13_Close`) or the convenience helper `AmiTLS13_HTTPGet()`.
+3. Use either the stream API (`AmiTLS13_Connect`, `AmiTLS13_StartTLS`, `AmiTLS13_Write`, `AmiTLS13_Read`, `AmiTLS13_Close`) or the convenience helper `AmiTLS13_HTTPGet()`.
 4. Close every `AmiTLS13Context` with `AmiTLS13_Close()`.
 5. Call `AmiTLS13_Exit()` once for every successful `AmiTLS13_Init()`.
 6. Close the library with `CloseLibrary(AmiTLS13Base)`.
@@ -50,6 +50,23 @@ Future verification flags are already reserved:
 AMITLS13F_VERIFY_CERT
 AMITLS13F_VERIFY_HOSTNAME
 ```
+
+## Stream API with TLS
+
+`AmiTLS13_HTTPGet()` is the simplest path, but applications that speak a non-HTTP protocol or need to build their own request can drive TLS directly. After connecting, call `AmiTLS13_StartTLS(ctx, host)` to upgrade the connection before any read or write. Pass the server hostname as `host`; it is used as the TLS SNI name. The handshake completes lazily on the first `AmiTLS13_Write()`/`AmiTLS13_Read()`.
+
+```c
+struct AmiTLS13Context *ctx = AmiTLS13_Connect("example.com", 443, AMITLS13F_INSECURE);
+if (ctx) {
+    if (AmiTLS13_StartTLS(ctx, "example.com") == AMITLS13_OK) {
+        AmiTLS13_Write(ctx, request, request_len);
+        n = AmiTLS13_Read(ctx, buf, sizeof(buf));
+    }
+    AmiTLS13_Close(ctx);
+}
+```
+
+For a plain (non-TLS) connection, skip `AmiTLS13_StartTLS()` and use `AmiTLS13_Write`/`AmiTLS13_Read` directly after `AmiTLS13_Connect()`.
 
 ## Example
 

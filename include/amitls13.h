@@ -32,6 +32,7 @@ LONG AmiTLS13_SetPublicKeyPinSHA256(const UBYTE *sha256, ULONG len);
 LONG AmiTLS13_GetLastPeerPublicKeySHA256(UBYTE *out_sha256, ULONG len);
 
 struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG flags);
+LONG AmiTLS13_StartTLS(struct AmiTLS13Context *ctx, const char *host);
 LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len);
 LONG AmiTLS13_Read(struct AmiTLS13Context *ctx, UBYTE *buf, ULONG maxlen);
 void AmiTLS13_Close(struct AmiTLS13Context *ctx);
