@@ -28,7 +28,7 @@ _AmiTLS13_SetDebugOutput:
 _AmiTLS13_Connect:
     move.l a6,-(sp)
     move.l 8(sp),a0
-    move.w 12(sp),d0
+    move.l 12(sp),d0
     move.l 16(sp),d1
     move.l _AmiTLS13Base,a6
     jsr -48(a6)
@@ -113,3 +113,13 @@ _AmiTLS13_GetLastPeerPublicKeySHA256:
     jsr -96(a6)
     move.l (sp)+,a6
     rts
+    .globl _AmiTLS13_StartTLS
+_AmiTLS13_StartTLS:
+    move.l a6,-(sp)
+    move.l 8(sp),a0
+    move.l 12(sp),a1
+    move.l _AmiTLS13Base,a6
+    jsr -102(a6)
+    move.l (sp)+,a6
+    rts
+

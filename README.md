@@ -49,6 +49,7 @@ build/amitls13_repeat_get_lib repeated HTTPS test through amitls13.library
 build/amitls13_example_get    SDK example using only sdk/ files
 build/amitls13_pin_print_lib  prints the leaf public-key material SHA256 hash
 build/amitls13_pin_fail_lib   negative test: rejects a deliberately wrong pin
+build/amitls13_stream_test_lib low-level Connect/StartTLS/Read stream test
 ```
 
 Trace build for Amiga-side diagnosis:
@@ -184,6 +185,7 @@ void AmiTLS13_Exit(void);
 void AmiTLS13_SetDebugOutput(BPTR fh);
 
 struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG flags);
+LONG AmiTLS13_StartTLS(struct AmiTLS13Context *ctx, const char *host);
 LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len);
 LONG AmiTLS13_Read(struct AmiTLS13Context *ctx, UBYTE *buf, ULONG maxlen);
 void AmiTLS13_Close(struct AmiTLS13Context *ctx);
@@ -228,7 +230,7 @@ Lifecycle rules for applications:
 - Client stubs in `sdk/amitls13_client_stubs.S` let consumer programs call the library vectors from C.
 - The connection context owns the BearSSL client engine, X.509 state and TLS I/O buffer and is allocated with `AllocMem()`.
 - `AmiTLS13_HTTPGet()` keeps the stable high-level HTTP path with small `AllocMem()` request and receive buffers. The current validated receive buffer is 1024 bytes.
-- `AmiTLS13_HTTPGet()` writes the full HTTP/1.0 response to the output file. Full status/header parsing is intentionally left to caller applications for now.
+- `AmiTLS13_HTTPGet()` writes the full HTTP/1.1 response to the output file. Full status/header parsing is intentionally left to caller applications for now.
 - Allocation defaults use `MEMF_PUBLIC` for OS1.3 compatibility. Builds may override `AMITLS13_MEM_FLAGS` and `AMITLS13_MEM_CLEAR_FLAGS` if a target system should prefer a specific memory class, but the default does not require Fast RAM.
 - TLS socket callbacks use BearSSL opaque pointers and keep callback state per `AmiTLS13Context`. The current default socket wait quantum is 50 ms with a 200-try budget, giving faster wake-up than the earlier 250 ms loop while keeping a conservative total wait window.
 - `AmiTLS13_Init()`/`AmiTLS13_Exit()` reference-count the shared `bsdsocket.library` handle so multiple library users do not close it out from under each other.

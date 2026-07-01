@@ -368,6 +368,13 @@ struct AmiTLS13Context *AmiTLS13_Connect(const char *host, UWORD port, ULONG fla
     return ctx;
 }
 
+LONG AmiTLS13_StartTLS(struct AmiTLS13Context *ctx, const char *host)
+{
+    if(!ctx || !host) return AMITLS13_ERR_IO;
+    if(ctx->tls_active) return AMITLS13_OK;
+    return tls_start(ctx, host);
+}
+
 LONG AmiTLS13_Write(struct AmiTLS13Context *ctx, const UBYTE *buf, ULONG len)
 {
     int r;
@@ -460,8 +467,8 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
     trace("TRACE httpget parse\n");
     if(amitls13_parse_url(url, &parsed)!=AMITLS13_OK) return AMITLS13_ERR_URL;
 
-    req = (char *)AllocMem(512, AMITLS13_MEM_CLEAR_FLAGS);
-    buf = (UBYTE *)AllocMem(1024, AMITLS13_MEM_FLAGS);
+    req = (char *)AllocMem(AMITLS13_HTTP_REQ_BUF, AMITLS13_MEM_CLEAR_FLAGS);
+    buf = (UBYTE *)AllocMem(AMITLS13_HTTP_RECV_BUF, AMITLS13_MEM_FLAGS);
     if(!req || !buf){
         rc = AMITLS13_ERR_IO;
         goto cleanup;
@@ -479,10 +486,10 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
 
     trace("TRACE httpget request build\n");
     strcpy(req, "GET ");
-    strcat(req, parsed.path);
-    strcat(req, " HTTP/1.0\r\nHost: ");
-    strcat(req, parsed.host);
-    strcat(req, "\r\nConnection: close\r\n\r\n");
+    strncat(req, parsed.path, AMITLS13_HTTP_REQ_BUF - strlen(req) - 1);
+    strncat(req, " HTTP/1.1\r\nHost: ", AMITLS13_HTTP_REQ_BUF - strlen(req) - 1);
+    strncat(req, parsed.host, AMITLS13_HTTP_REQ_BUF - strlen(req) - 1);
+    strncat(req, "\r\nUser-Agent: AmiTLS13/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n", AMITLS13_HTTP_REQ_BUF - strlen(req) - 1);
     if(parsed.https) dbg("TLS write request\n");
     trace("TRACE httpget write\n");
     if(AmiTLS13_Write(ctx, (const UBYTE *)req, strlen(req))<0){
@@ -497,7 +504,7 @@ LONG AmiTLS13_HTTPGet(const char *url, const char *outfile, ULONG flags)
         ctx->suppress_alert_writes = 1;
     }
     trace("TRACE httpget read loop\n");
-    while((n=AmiTLS13_Read(ctx, buf, 1024))>0){
+    while((n=AmiTLS13_Read(ctx, buf, AMITLS13_HTTP_RECV_BUF))>0){
         total+=n;
         if(fh) Write(fh, buf, n);
     }
@@ -514,10 +521,8 @@ cleanup:
         trace("TRACE httpget close\n");
         AmiTLS13_Close(ctx);
     }
-    if(buf) FreeMem(buf, 1024);
-    if(req) FreeMem(req, 512);
+    if(buf) FreeMem(buf, AMITLS13_HTTP_RECV_BUF);
+    if(req) FreeMem(req, AMITLS13_HTTP_REQ_BUF);
     trace("TRACE httpget done\n");
     return rc;
 }
-
-

@@ -6,7 +6,7 @@
 #include <proto/dos.h>
 #include "amitls13.h"
 
-#define AMITLS13_LIB_VERSION 1
+#define AMITLS13_LIB_VERSION 2
 #define AMITLS13_LIB_REVISION 0
 
 struct AmiTLS13Library {
@@ -21,7 +21,7 @@ struct AmiTLS13Library {
 struct ExecBase *SysBase = 0;
 
 static const char lib_name[] = "amitls13.library";
-static const char lib_id[] = "amitls13.library 1.0 (21.06.2026)\r\n";
+static const char lib_id[] = "amitls13.library 2.0 (30.06.2026)\r\n";
 
 struct AmiTLS13Library *AmiTLS13Lib_Init(struct AmiTLS13Library *base, BPTR seg_list, struct ExecBase *sys_base);
 struct AmiTLS13Library *AmiTLS13Lib_Open(struct AmiTLS13Library *base);
@@ -46,6 +46,7 @@ APTR AmiTLS13Lib_VSocketErrno(void);
 APTR AmiTLS13Lib_VHTTPGet(void);
 APTR AmiTLS13Lib_VSetPublicKeyPinSHA256(void);
 APTR AmiTLS13Lib_VGetLastPeerPublicKeySHA256(void);
+APTR AmiTLS13Lib_VStartTLS(void);
 
 static APTR func_table[] = {
     (APTR)AmiTLS13Lib_VOpen,
@@ -64,6 +65,7 @@ static APTR func_table[] = {
     (APTR)AmiTLS13Lib_VHTTPGet,
     (APTR)AmiTLS13Lib_VSetPublicKeyPinSHA256,
     (APTR)AmiTLS13Lib_VGetLastPeerPublicKeySHA256,
+    (APTR)AmiTLS13Lib_VStartTLS,
     (APTR)-1
 };
 

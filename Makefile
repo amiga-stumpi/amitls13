@@ -26,6 +26,7 @@ REPEATTOOLOBJS = $(BUILD)/amitls13_repeat_get_lib.o $(BUILD)/amitls13_client_stu
 SDKEXAMPLEOBJS = $(BUILD)/amitls13_example_get.o $(BUILD)/sdk_amitls13_client_stubs.o
 PINFAILTOOLOBJS = $(BUILD)/amitls13_pin_fail_lib.o $(BUILD)/amitls13_client_stubs.o
 PINPRINTTOOLOBJS = $(BUILD)/amitls13_pin_print_lib.o $(BUILD)/amitls13_client_stubs.o
+STREAMTESTOBJS = $(BUILD)/amitls13_stream_test_lib.o $(BUILD)/amitls13_client_stubs.o
 
 BRSRCS = \
 	third_party/bearssl/src/mac/hmac.c \
@@ -70,7 +71,7 @@ BROBJS = $(patsubst third_party/bearssl/src/%.c,$(BUILD)/bearssl/%.o,$(BRSRCS))
 
 .PHONY: all clean trace debug
 
-all: $(BUILD)/libamitls13.a $(BUILD)/amitls13.library $(BUILD)/amitls13_get $(BUILD)/amitls13_get_lib $(BUILD)/amitls13_openclose $(BUILD)/amitls13_repeat_get_lib $(BUILD)/amitls13_example_get $(BUILD)/amitls13_pin_fail_lib $(BUILD)/amitls13_pin_print_lib
+all: $(BUILD)/libamitls13.a $(BUILD)/amitls13.library $(BUILD)/amitls13_get $(BUILD)/amitls13_get_lib $(BUILD)/amitls13_openclose $(BUILD)/amitls13_repeat_get_lib $(BUILD)/amitls13_example_get $(BUILD)/amitls13_pin_fail_lib $(BUILD)/amitls13_pin_print_lib $(BUILD)/amitls13_stream_test_lib
 
 trace:
 	$(MAKE) clean
@@ -111,6 +112,9 @@ $(BUILD)/amitls13_pin_fail_lib.o: tools/amitls13_pin_fail_lib.c | $(BUILD)
 $(BUILD)/amitls13_pin_print_lib.o: tools/amitls13_pin_print_lib.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD)/amitls13_stream_test_lib.o: tools/amitls13_stream_test_lib.c | $(BUILD)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD)/amitls13_example_get.o: sdk/examples/amitls13_example_get.c | $(BUILD)
 	$(CC) $(SDKCFLAGS) -c $< -o $@
 
@@ -144,6 +148,9 @@ $(BUILD)/amitls13_pin_fail_lib: $(PINFAILTOOLOBJS)
 
 $(BUILD)/amitls13_pin_print_lib: $(PINPRINTTOOLOBJS)
 	$(CC) $(LDFLAGS) $(PINPRINTTOOLOBJS) -o $@
+
+$(BUILD)/amitls13_stream_test_lib: $(STREAMTESTOBJS)
+	$(CC) $(LDFLAGS) $(STREAMTESTOBJS) -o $@
 
 clean:
 	rm -rf $(BUILD)
